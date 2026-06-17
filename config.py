@@ -1,0 +1,188 @@
+"""Central configuration for the G1 interactive voice pipeline.
+
+Every tunable lives here so nothing is scattered across modules. Secrets and
+deployment-specific values are read from the ``.env`` file (see ``.env.example``).
+
+Import style:  ``from config import settings``  then ``settings.OPENAI_API_KEY``.
+A module-level ``settings`` singleton is created at import time.
+"""
+from __future__ import annotations
+
+import os
+from dataclasses import dataclass, field
+from pathlib import Path
+
+try:
+    from dotenv import load_dotenv
+except ImportError:  # pragma: no cover - dotenv is a hard dep, but be friendly
+    def load_dotenv(*_args, **_kwargs):  # type: ignore
+        return False
+
+BASE_DIR = Path(__file__).resolve().parent
+load_dotenv(BASE_DIR / ".env")
+
+
+def _get(name: str, default: str = "") -> str:
+    val = os.getenv(name)
+    return val if val not in (None, "") else default
+
+
+def _get_bool(name: str, default: bool = False) -> bool:
+    return _get(name, str(default)).strip().lower() in ("1", "true", "yes", "on")
+
+
+def _get_int(name: str, default: int) -> int:
+    try:
+        return int(_get(name, str(default)))
+    except ValueError:
+        return default
+
+
+def _get_float(name: str, default: float) -> float:
+    try:
+        return float(_get(name, str(default)))
+    except ValueError:
+        return default
+
+
+def _get_list(name: str, default: str) -> list[str]:
+    return [s.strip() for s in _get(name, default).split(",") if s.strip()]
+
+
+def _get_int_list(name: str, default: str = "") -> list[int]:
+    out: list[int] = []
+    for s in _get(name, default).split(","):
+        s = s.strip()
+        if not s:
+            continue
+        try:
+            out.append(int(s))
+        except ValueError:
+            pass
+    return out
+
+
+@dataclass
+class Settings:
+    """Resolved configuration, populated from the environment."""
+
+    # ---- API keys ----
+    OPENAI_API_KEY: str = field(default_factory=lambda: _get("OPENAI_API_KEY"))
+    OPENROUTER_API_KEY: str = field(default_factory=lambda: _get("OPENROUTER_API_KEY"))
+    GEMINI_API_KEY: str = field(default_factory=lambda: _get("GEMINI_API_KEY"))
+    ELEVENLABS_API_KEY: str = field(default_factory=lambda: _get("ELEVENLABS_API_KEY"))
+    BRAVE_SEARCH_API_KEY: str = field(default_factory=lambda: _get("BRAVE_SEARCH_API_KEY"))
+
+    # ---- LLM ----
+    LLM_BACKEND: str = field(default_factory=lambda: _get("LLM_BACKEND", "openrouter"))
+    OPENROUTER_MODEL: str = field(default_factory=lambda: _get("OPENROUTER_MODEL", "openai/gpt-4o-mini"))
+    OPENAI_LLM_MODEL: str = field(default_factory=lambda: _get("OPENAI_LLM_MODEL", "gpt-4o-mini"))
+    LLM_TEMPERATURE: float = field(default_factory=lambda: _get_float("LLM_TEMPERATURE", 0.6))
+    LLM_MAX_TOKENS: int = field(default_factory=lambda: _get_int("LLM_MAX_TOKENS", 400))
+
+    # ---- STT ----
+    OPENAI_STT_MODEL: str = field(default_factory=lambda: _get("OPENAI_STT_MODEL", "gpt-4o-transcribe"))
+
+    # ---- TTS ----
+    ELEVENLABS_MODEL: str = field(default_factory=lambda: _get("ELEVENLABS_MODEL", "eleven_flash_v2_5"))
+    ELEVENLABS_VOICE_ID: str = field(default_factory=lambda: _get("ELEVENLABS_VOICE_ID", "DANw8bnAVbjDEHwZIoYa"))
+    ELEVENLABS_ARABIC_VOICE_ID: str = field(
+        default_factory=lambda: _get("ELEVENLABS_ARABIC_VOICE_ID", _get("ELEVENLABS_VOICE_ID", "DANw8bnAVbjDEHwZIoYa"))
+    )
+    TTS_OUTPUT_FORMAT: str = field(default_factory=lambda: _get("TTS_OUTPUT_FORMAT", "pcm_16000"))
+    TTS_STABILITY: float = field(default_factory=lambda: _get_float("TTS_STABILITY", 0.5))
+    TTS_SIMILARITY: float = field(default_factory=lambda: _get_float("TTS_SIMILARITY", 0.75))
+    TTS_SPEED: float = field(default_factory=lambda: _get_float("TTS_SPEED", 1.0))
+
+    # ---- Audio / VAD ----
+    SAMPLE_RATE: int = field(default_factory=lambda: _get_int("SAMPLE_RATE", 16000))
+    SILENCE_RMS_THRESHOLD: float = field(default_factory=lambda: _get_float("SILENCE_RMS_THRESHOLD", 500.0))
+    SILENCE_DURATION_MS: int = field(default_factory=lambda: _get_int("SILENCE_DURATION_MS", 900))
+    MIN_RECORDING_MS: int = field(default_factory=lambda: _get_int("MIN_RECORDING_MS", 800))
+    MAX_RECORDING_MS: int = field(default_factory=lambda: _get_int("MAX_RECORDING_MS", 15000))
+    # End an active-listening turn early if no speech is heard (counts as a silent
+    # turn toward IDLE_AFTER_SILENT_TURNS). Standby cycles on its own window.
+    LISTEN_NO_SPEECH_TIMEOUT_MS: int = field(default_factory=lambda: _get_int("LISTEN_NO_SPEECH_TIMEOUT_MS", 8000))
+    STANDBY_WINDOW_MS: int = field(default_factory=lambda: _get_int("STANDBY_WINDOW_MS", 10000))
+    MIC_SOURCE: str = field(default_factory=lambda: _get("MIC_SOURCE", "host"))
+    MIC_DEVICE: str = field(default_factory=lambda: _get("MIC_DEVICE", ""))
+    AUDIO_SINK: str = field(default_factory=lambda: _get("AUDIO_SINK", "robot"))
+
+    # ---- Wake word / standby ----
+    WAKE_WORDS: list[str] = field(
+        default_factory=lambda: [w.lower() for w in _get_list(
+            "WAKE_WORDS", "hi robot,hey robot,hello robot,هاي روبوت,مرحبا روبوت")]
+    )
+    WAKE_ACK_TEXT_EN: str = field(default_factory=lambda: _get("WAKE_ACK_TEXT_EN", "Aha!"))
+    WAKE_ACK_TEXT_AR: str = field(default_factory=lambda: _get("WAKE_ACK_TEXT_AR", "أها!"))
+    IDLE_AFTER_SILENT_TURNS: int = field(default_factory=lambda: _get_int("IDLE_AFTER_SILENT_TURNS", 10))
+
+    # ---- Robot / DDS ----
+    ROBOT_ENABLED: bool = field(default_factory=lambda: _get_bool("ROBOT_ENABLED", True))
+    DDS_DOMAIN: int = field(default_factory=lambda: _get_int("DDS_DOMAIN", 0))
+    DDS_INTERFACE: str = field(default_factory=lambda: _get("DDS_INTERFACE", "ens37"))
+    ROBOT_SPEAKER_VOLUME: int = field(default_factory=lambda: _get_int("ROBOT_SPEAKER_VOLUME", 80))
+    ARM_GESTURES_ENABLED: bool = field(default_factory=lambda: _get_bool("ARM_GESTURES_ENABLED", True))
+    # If true, command the locomotion FSM (LocoClient.Start) at startup so arm
+    # actions are accepted. Leave FALSE for safety: put the robot in Main/Regular
+    # mode + standing via the R3 remote yourself; gestures are best-effort.
+    ARM_ENTER_FSM: bool = field(default_factory=lambda: _get_bool("ARM_ENTER_FSM", False))
+    # Keep the arms gesturing for the WHOLE time the robot is talking (looped),
+    # instead of one quick wave then freezing. Always-on movement (any emotion).
+    TALK_GESTURES_ENABLED: bool = field(default_factory=lambda: _get_bool("TALK_GESTURES_ENABLED", True))
+    # Pause between looped talk gestures (ms). The loop bails out of this pause the
+    # instant speech ends, so it never delays the relax.
+    TALK_GESTURE_GAP_MS: int = field(default_factory=lambda: _get_int("TALK_GESTURE_GAP_MS", 250))
+    # Safety cap: most gestures to play in a single reply (0 = unlimited). Stops a
+    # runaway loop if a reply is extremely long.
+    TALK_GESTURE_MAX_PER_REPLY: int = field(default_factory=lambda: _get_int("TALK_GESTURE_MAX_PER_REPLY", 40))
+    # Optional override for which arm-action ids to cycle while talking (e.g.
+    # "25,26,27"). Empty => use the built-in per-emotion palette in arm_gestures.py.
+    TALK_GESTURE_IDS: list[int] = field(default_factory=lambda: _get_int_list("TALK_GESTURE_IDS", ""))
+    # Robot onboard mic (experimental, U6-unverified) — raw PCM UDP multicast.
+    ROBOT_MIC_GROUP: str = field(default_factory=lambda: _get("ROBOT_MIC_GROUP", "239.168.123.161"))
+    ROBOT_MIC_PORT: int = field(default_factory=lambda: _get_int("ROBOT_MIC_PORT", 5555))
+    # Local IP of the robot-facing NIC (the host's 192.168.123.x address). Used to
+    # bind the multicast join to the right interface on a multi-homed host; blank =
+    # let the kernel pick (may join the wrong NIC -> no robot-mic audio).
+    ROBOT_MIC_IFACE_IP: str = field(default_factory=lambda: _get("ROBOT_MIC_IFACE_IP", ""))
+
+    # ---- Knowledge base ----
+    KB_STRICT: bool = field(default_factory=lambda: _get_bool("KB_STRICT", False))
+
+    # ---- Logging ----
+    LOG_LEVEL: str = field(default_factory=lambda: _get("LOG_LEVEL", "INFO"))
+
+    # ---- Derived paths ----
+    BASE_DIR: Path = BASE_DIR
+    LOG_DIR: Path = BASE_DIR / "logs"
+    KNOWLEDGE_DIR: Path = BASE_DIR / "knowledge"
+    PROMPTS_DIR: Path = BASE_DIR / "prompts"
+
+    def redacted(self) -> dict:
+        """A dict of settings safe to log (keys masked)."""
+        def mask(v: str) -> str:
+            return f"{v[:6]}…{v[-4:]}" if len(v) > 12 else ("set" if v else "MISSING")
+
+        return {
+            "OPENAI_API_KEY": mask(self.OPENAI_API_KEY),
+            "OPENROUTER_API_KEY": mask(self.OPENROUTER_API_KEY),
+            "ELEVENLABS_API_KEY": mask(self.ELEVENLABS_API_KEY),
+            "LLM_BACKEND": self.LLM_BACKEND,
+            "OPENROUTER_MODEL": self.OPENROUTER_MODEL,
+            "OPENAI_STT_MODEL": self.OPENAI_STT_MODEL,
+            "ELEVENLABS_MODEL": self.ELEVENLABS_MODEL,
+            "TTS_OUTPUT_FORMAT": self.TTS_OUTPUT_FORMAT,
+            "SAMPLE_RATE": self.SAMPLE_RATE,
+            "MIC_SOURCE": self.MIC_SOURCE,
+            "AUDIO_SINK": self.AUDIO_SINK,
+            "ROBOT_ENABLED": self.ROBOT_ENABLED,
+            "DDS_INTERFACE": self.DDS_INTERFACE,
+            "ARM_GESTURES_ENABLED": self.ARM_GESTURES_ENABLED,
+            "TALK_GESTURES_ENABLED": self.TALK_GESTURES_ENABLED,
+            "WAKE_WORDS": self.WAKE_WORDS,
+            "IDLE_AFTER_SILENT_TURNS": self.IDLE_AFTER_SILENT_TURNS,
+        }
+
+
+settings = Settings()

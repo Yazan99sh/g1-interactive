@@ -1,0 +1,16 @@
+# G1 Interactive Voice Pipeline — Python dependencies
+#
+# Install on the Linux host (the PC on the robot's 192.168.123.x LAN) inside
+# a conda/venv, e.g.:   python -m pip install -r requirements.txt
+#
+# NOTE: unitree_sdk2_python (imported as `unitree_sdk2py`) is NOT on PyPI.
+# It is installed from source on the robot host (the same env used for teleop):
+#   git clone https://github.com/unitreerobotics/unitree_sdk2_python
+#   cd unitree_sdk2_python && pip install -e .
+# The app degrades gracefully (AUDIO_SINK=host / ROBOT_ENABLED=false) when it
+# is absent, so you can develop the whole cloud pipeline without the robot.
+
+httpx>=0.27           # async HTTP for OpenAI / ElevenLabs / OpenRouter
+python-dotenv>=1.0    # load .env
+numpy>=1.24           # PCM math + resampling
+sounddevice>=0.4.6    # host microphone capture + host speaker playback (PortAudio)

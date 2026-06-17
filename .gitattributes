@@ -1,0 +1,15 @@
+# Normalize line endings: the repo is edited on Windows but runs on the Linux
+# robot host. Store everything as LF so shell scripts/systemd units work there.
+* text=auto eol=lf
+
+# Shell scripts and systemd units MUST be LF.
+*.sh    text eol=lf
+*.service text eol=lf
+
+# Treat these as binary (never touch line endings).
+*.wav   binary
+*.png   binary
+*.jpg   binary
+*.onnx  binary
+*.tflite binary
+*.ppn   binary

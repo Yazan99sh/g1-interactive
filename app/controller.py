@@ -1,0 +1,151 @@
+"""Master conversation controller — the top-level state machine.
+
+    STANDBY  ──("Hi Robot")──►  ACK("Aha!" + wave)  ──►  CONVERSE
+       ▲                                                     │
+       └──────────  (10 consecutive silent turns)  ◄─────────┘
+
+* STANDBY: keep listening cheaply (VAD-gated), transcribe only when someone
+  speaks, and wait for a wake phrase. Arms rest.
+* ACK: the robot says "Aha!" and waves, then the conversation opens.
+* CONVERSE: Listen → Think → Respond, looping. Each turn with no speech bumps a
+  counter; ``IDLE_AFTER_SILENT_TURNS`` silent turns drop back to STANDBY until the
+  next "Hi Robot".
+"""
+from __future__ import annotations
+
+import asyncio
+
+from app.conversation import ConversationManager
+from app.logging_setup import get_logger, log_exception
+from app.pipeline import ConversationPipeline
+from app.state import Emotion, Language, PipelineState, detect_language
+from audio.mic import MicSource, record_utterance
+from audio.vad import UtteranceSegmenter
+from audio.wake import WakeWordDetector
+from ai.stt import OpenAITranscriber
+from config import settings
+from robot.interfaces import ArmController
+
+log = get_logger("app.controller")
+
+
+class Controller:
+    def __init__(
+        self,
+        mic: MicSource,
+        transcriber: OpenAITranscriber,
+        pipeline: ConversationPipeline,
+        conversation: ConversationManager,
+        wake_detector: WakeWordDetector,
+        arm: ArmController,
+    ) -> None:
+        self.mic = mic
+        self.transcriber = transcriber
+        self.pipeline = pipeline
+        self.conversation = conversation
+        self.wake_detector = wake_detector
+        self.arm = arm
+        self.sample_rate = mic.sample_rate
+        self.state = PipelineState.STANDBY
+        self._stop = False
+
+    # ---- segmenters -------------------------------------------------------
+    def _standby_segmenter(self) -> UtteranceSegmenter:
+        # Short window so standby keeps cycling and stays responsive.
+        return UtteranceSegmenter(
+            self.sample_rate, settings.SILENCE_RMS_THRESHOLD, settings.SILENCE_DURATION_MS,
+            settings.MIN_RECORDING_MS, settings.STANDBY_WINDOW_MS,
+            no_speech_timeout_ms=settings.STANDBY_WINDOW_MS,
+        )
+
+    def _active_segmenter(self) -> UtteranceSegmenter:
+        return UtteranceSegmenter(
+            self.sample_rate, settings.SILENCE_RMS_THRESHOLD, settings.SILENCE_DURATION_MS,
+            settings.MIN_RECORDING_MS, settings.MAX_RECORDING_MS,
+            no_speech_timeout_ms=settings.LISTEN_NO_SPEECH_TIMEOUT_MS,
+        )
+
+    # ---- lifecycle --------------------------------------------------------
+    async def run(self) -> None:
+        await self.mic.open()
+        log.info("Controller running. Say one of %s to wake the robot.", settings.WAKE_WORDS)
+        try:
+            while not self._stop:
+                await self.standby()
+                if self._stop:
+                    break
+                await self.converse()
+        finally:
+            await self.mic.close()
+            await self.arm.close()
+            await self.pipeline.sink.close()
+
+    def stop(self) -> None:
+        self._stop = True
+        try:
+            self.mic.flush()  # wake an in-flight read so the loop re-checks _stop
+        except Exception:
+            pass
+        try:
+            self.pipeline.sink.stop()
+        except Exception:
+            pass
+
+    # ---- STANDBY ----------------------------------------------------------
+    async def standby(self) -> None:
+        self.state = PipelineState.STANDBY
+        await self.arm.relax()
+        log.info("STANDBY — waiting for wake word…")
+        while not self._stop:
+            pcm, had_speech = await record_utterance(self.mic, self._standby_segmenter())
+            if not had_speech:
+                continue
+            transcription = await self.transcriber.transcribe(pcm, self.sample_rate, None)
+            if transcription.is_blank:
+                continue
+            if self.wake_detector.matches(transcription.text):
+                lang = transcription.language or detect_language(transcription.text) or Language.ENGLISH
+                log.info("WAKE — heard '%s' (%s)", transcription.text, lang.value)
+                self.conversation.reset()
+                self.conversation.set_language(lang)
+                await self._acknowledge(lang)
+                return
+            log.debug("Ignored (not a wake word): '%s'", transcription.text)
+
+    async def _acknowledge(self, language: Language) -> None:
+        ack = settings.WAKE_ACK_TEXT_AR if language is Language.ARABIC else settings.WAKE_ACK_TEXT_EN
+        try:
+            # Wave hello and say "Aha!" at the same time (one failing branch must
+            # not cancel the other).
+            await asyncio.gather(
+                self.arm.greet(),
+                self.pipeline.say(ack, language, emotion=Emotion.EXCITED, gesture=False),
+                return_exceptions=True,
+            )
+            await self.arm.relax()
+        except Exception:
+            log_exception(log, "Wake acknowledgement failed")
+
+    # ---- CONVERSE ---------------------------------------------------------
+    async def converse(self) -> None:
+        silent = 0
+        limit = settings.IDLE_AFTER_SILENT_TURNS
+        log.info("CONVERSE — listening (idle after %d silent turns).", limit)
+        while not self._stop and silent < limit:
+            self.state = PipelineState.LISTENING
+            pcm, had_speech = await record_utterance(self.mic, self._active_segmenter())
+            if not had_speech:
+                silent += 1
+                log.info("Silent turn %d/%d", silent, limit)
+                continue
+
+            self.state = PipelineState.THINKING
+            outcome = await self.pipeline.handle_audio(pcm, self.sample_rate)
+            if not outcome.had_speech:
+                silent += 1
+                log.info("Silent turn %d/%d (blank transcription)", silent, limit)
+                continue
+            silent = 0  # real exchange — reset the idle counter
+
+        log.info("No speech for %d turns — returning to STANDBY.", limit)
+        self.state = PipelineState.STANDBY

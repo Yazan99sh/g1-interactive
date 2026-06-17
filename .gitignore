@@ -1,0 +1,29 @@
+# Secrets — never commit
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+
+# Runtime
+logs/*.log
+logs/*.log.*
+logs/*.jsonl
+recordings/
+*.wav.tmp
+
+# Wake-word models (downloaded/trained, can be large)
+models/
+
+# Control panel runtime state
+controlpanel/state/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
