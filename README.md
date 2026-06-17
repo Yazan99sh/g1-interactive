@@ -73,15 +73,42 @@ g1-interactive/
     speaker.py            G1 speaker (PCM out over DDS)      ← from verified spec
     arm_gestures.py       G1 arm gestures while talking      ← from verified spec
     mic_robot.py          optional G1 onboard mic over DDS   ← from verified spec
+  prompts/persona.md      the robot's instructions/persona (editable; built-in fallback)
   knowledge/about.md      the robot's editable knowledge base
-  tools/                  smoke test + device list helpers
-  logs/                   runtime logs (gitignored)
+  tools/                  smoke test + device list + doctor.py preflight
+  logs/                   runtime logs + events.jsonl transcript (gitignored)
+  controlpanel/           web control panel (FastAPI) — manage the feature in a browser
+  deploy/                 systemd --user units + install scripts (pipeline + panel)
+  setup.sh                one-shot host setup (deps + optional SDK + .env)
 ```
+
+## Control panel
+
+A browser-based control panel (FastAPI) manages the whole feature from any device on
+the LAN — process start/stop/restart, a live log console, and editors for the
+knowledge base, instructions, and `.env` (keys + voice id), plus a script runner and
+a live transcript + cost view. Run it on the host:
+
+```bash
+python -m pip install -r controlpanel/requirements.txt
+python -m controlpanel            # -> http://<host>:8800
+```
+
+See **`CONTROL_PANEL.md`** for the full tour, the optional `PANEL_TOKEN`, and running
+both the pipeline and panel as `systemd --user` services (`deploy/install_services.sh`).
 
 ## Setup
 
 On the **Linux host** that sits on the robot's `192.168.123.x` LAN (the same
-machine class used for teleop), inside a conda/venv:
+machine class used for teleop). The quickest path is the setup script:
+
+```bash
+./setup.sh                # venv/conda + core+panel deps + .env bootstrap
+./setup.sh --with-sdk     # also install unitree_sdk2_python from source
+python tools/doctor.py    # preflight: keys, DDS iface, robot ping, audio
+```
+
+Or do it by hand inside a conda/venv:
 
 ```bash
 python -m pip install -r requirements.txt
@@ -136,7 +163,10 @@ firmware-dependent; see the deployment runbook and `g1-teleop/06-runbook.md`.
 * No acoustic echo cancellation yet — the mic is flushed during playback to avoid
   self-triggering, so the user can't barge in mid-reply. Add AEC or a robot-mic
   with onboard AEC later.
-* LLM is non-streaming (speaks after the full reply). Fine for short replies; can
-  switch to streamed TTS for lower latency.
+* Streaming is now on by default (`STREAMING_ENABLED`): the reply is streamed and
+  spoken sentence-by-sentence so the robot starts talking after the first sentence.
+* Talking gestures loop continuously for the whole reply (`TALK_GESTURE_*`) instead
+  of one quick wave; gesture ids are firmware presets — confirm with
+  `tools/g1_list_actions.py`.
 * Knowledge retrieval is keyword-based (no embeddings) — great for a small curated
   KB; swap in embeddings if the KB grows large.

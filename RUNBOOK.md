@@ -33,10 +33,13 @@ like the teleop VM (`ens33` NAT for internet + `ens37` for the robot LAN).
 ## 1. Install (on the host)
 
 ```bash
-# inside a conda/venv (reuse the teleop env if it has unitree_sdk2_python)
-python -m pip install -r requirements.txt
+# Fast path on a fresh host (venv/conda + core+panel deps + .env bootstrap):
+./setup.sh                 # add --with-sdk to also install unitree_sdk2_python
+python tools/doctor.py     # preflight: keys, DDS iface, robot ping, audio devices
 
-# Robot DDS SDK (not on PyPI) — same as teleop:
+# …or by hand, inside a conda/venv (reuse the teleop env if it has the SDK):
+python -m pip install -r requirements.txt
+python -m pip install -r controlpanel/requirements.txt   # for the control panel
 git clone https://github.com/unitreerobotics/unitree_sdk2_python
 cd unitree_sdk2_python && pip install -e . && cd -
 ```
@@ -96,7 +99,22 @@ Run these in order; each gates the next.
 | 7 | `python main.py` then say **"Hi Robot"** | full pipeline: "Aha!" + wave → conversation |
 
 The robot answers **"Aha!"** and waves, then listens. After **10** silent turns
-(`IDLE_AFTER_SILENT_TURNS`) it returns to standby until the next "Hi Robot".
+(`IDLE_AFTER_SILENT_TURNS`) it returns to standby until the next "Hi Robot". The
+robot now **gestures continuously while it speaks** and **starts talking after the
+first sentence** (streaming) — see `TALK_GESTURE_*` and `STREAMING_ENABLED`.
+
+### Control panel (optional, recommended)
+
+Instead of editing files + restarting by hand, run the web panel and do it from a
+browser (start/stop, live logs, env/keys/voice, knowledge, instructions, scripts,
+transcript+cost):
+
+```bash
+python -m controlpanel            # -> http://<host>:8800
+# or install both as services:  bash deploy/install_services.sh
+```
+
+See `CONTROL_PANEL.md`.
 
 ---
 
@@ -116,6 +134,9 @@ The robot answers **"Aha!"** and waves, then listens. After **10** silent turns
 | Test tone is garbled / wrong pitch | PCM not 16k mono s16le | keep `TTS_OUTPUT_FORMAT=pcm_16000`; tone test uses 16k already |
 | No sound at all from robot | wrong DDS iface, or volume 0 | fix `DDS_INTERFACE`; raise `ROBOT_SPEAKER_VOLUME` |
 | Speech ok but arms never move | robot not in Main mode / arm FSM | R1+X + stand; or set `ARM_ENTER_FSM=true` (commands LocoClient.Start) |
+| Arms wave once then freeze mid-reply | `TALK_GESTURES_ENABLED=false` | set it true (default); the talk loop gestures the whole reply |
+| Long pause before the robot talks | non-streaming, or slow network | keep `STREAMING_ENABLED=true`; check internet (STT/LLM/TTS are cloud) |
+| Standby costs add up / slow trigger | STT wake engine | set `WAKE_ENGINE=openwakeword` + `pip install openwakeword` (English/phrase-only) |
 | Wrong gesture fires | firmware action-id differs | run `g1_list_actions.py`, update ids in `robot/arm_gestures.py` |
 | Robot triggers itself / echoes | speaker feeding the mic | mic is flushed between turns; move USB mic away from speaker; lower volume |
 | ElevenLabs 401/403 on PCM | plan can't output PCM | use a Creator+ key, or set `TTS_OUTPUT_FORMAT=mp3_44100_128` + `pip install miniaudio` |

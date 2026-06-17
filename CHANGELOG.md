@@ -30,14 +30,32 @@ manages the feature (scripts, knowledge, instructions, env/keys/voice, live logs
   unchanged). `openwakeword` runs a local model in standby (no STT cost, faster, offline,
   English/phrase-only) — `audio/wake_audio.py`, opt-in, graceful fallback to `stt`.
 
+### Added — web control panel (`controlpanel/`, FastAPI + vanilla-JS SPA)
+- Manage the whole feature from a browser on the LAN (headless host OK): **process
+  control** (systemd `--user` or panel-managed subprocess, auto-detected), **live log
+  console** (WebSocket) + log-level toggle, **knowledge** / **instructions** / **.env**
+  editors (keys masked, voice id highlighted, comments preserved), **scripts** runner
+  (run `tools/`+`scripts/`, stream output, upload), and a **transcript + cost** view.
+- Optional `PANEL_TOKEN` guard; KB/script paths confined; scripts run via argv (no shell).
+- Run: `python -m controlpanel` → `http://<host>:8800`. See `CONTROL_PANEL.md`.
+
+### Added — clean environment & deploy
+- `setup.sh` (venv/conda + deps + optional unitree SDK + `.env` bootstrap),
+  `tools/doctor.py` preflight (python/deps/keys/DDS iface/robot ping/audio),
+  `deploy/` systemd `--user` units + install/uninstall scripts for pipeline + panel.
+
 ### Added — config & editability
 - **Editable instructions:** persona moved out of code into `prompts/persona.md`
   (built-in fallback kept); `ConversationManager.reload_persona()`.
 - **Per-turn event log** `logs/events.jsonl` (`app/metrics.py`) — transcript +
   rough cost source for the control panel; best-effort, never disturbs a turn.
 
+### Added — repo
+- Git repository initialized (scope: feature + control panel); `.gitattributes`
+  (LF for the Linux host); `.gitignore` covers `.env`, `events.jsonl`, models, state.
+
 ### In progress (this iteration)
-- Web control panel (FastAPI) · clean-env setup + `doctor.py` · git repo + GitHub push.
+- Push to GitHub (coordinating account/repo/auth on the new host).
 
 ## [0.1.0] — 2026-06-10 — Initial build + first working hardware demo ✅
 
