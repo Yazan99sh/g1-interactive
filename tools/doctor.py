@@ -57,9 +57,9 @@ def mask(v: str) -> str:
 
 def check_python() -> None:
     v = sys.version_info
-    ok = v >= (3, 11)
+    ok = v >= (3, 10)
     line("PASS" if ok else "FAIL", f"Python {v.major}.{v.minor}.{v.micro}",
-         "" if ok else "need >= 3.11")
+         "" if ok else "need >= 3.10")
 
 
 def check_imports() -> None:
