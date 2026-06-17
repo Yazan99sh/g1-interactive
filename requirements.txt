@@ -14,3 +14,10 @@ httpx>=0.27           # async HTTP for OpenAI / ElevenLabs / OpenRouter
 python-dotenv>=1.0    # load .env
 numpy>=1.24           # PCM math + resampling
 sounddevice>=0.4.6    # host microphone capture + host speaker playback (PortAudio)
+
+# ---- Optional ----
+# Offline wake word (WAKE_ENGINE=openwakeword): pip install openwakeword
+#   openwakeword>=0.6   # pulls onnxruntime; built-in models or a custom "Hi Robot" model
+# MP3 TTS decode (only if TTS_OUTPUT_FORMAT is mp3_*): pip install miniaudio
+#   miniaudio>=1.59
+# The web control panel has its own deps — see controlpanel/requirements.txt.

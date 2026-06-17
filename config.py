@@ -75,6 +75,10 @@ class Settings:
 
     # ---- LLM ----
     LLM_BACKEND: str = field(default_factory=lambda: _get("LLM_BACKEND", "openrouter"))
+    # Stream the reply sentence-by-sentence into TTS so the robot starts talking as
+    # soon as the first sentence is ready (much lower perceived latency). Falls back
+    # to the one-shot path automatically if streaming yields nothing.
+    STREAMING_ENABLED: bool = field(default_factory=lambda: _get_bool("STREAMING_ENABLED", True))
     OPENROUTER_MODEL: str = field(default_factory=lambda: _get("OPENROUTER_MODEL", "openai/gpt-4o-mini"))
     OPENAI_LLM_MODEL: str = field(default_factory=lambda: _get("OPENAI_LLM_MODEL", "gpt-4o-mini"))
     LLM_TEMPERATURE: float = field(default_factory=lambda: _get_float("LLM_TEMPERATURE", 0.6))
@@ -116,6 +120,18 @@ class Settings:
     WAKE_ACK_TEXT_EN: str = field(default_factory=lambda: _get("WAKE_ACK_TEXT_EN", "Aha!"))
     WAKE_ACK_TEXT_AR: str = field(default_factory=lambda: _get("WAKE_ACK_TEXT_AR", "أها!"))
     IDLE_AFTER_SILENT_TURNS: int = field(default_factory=lambda: _get_int("IDLE_AFTER_SILENT_TURNS", 10))
+    # Wake engine: "stt" (default) transcribes standby utterances and matches WAKE_WORDS
+    # (bilingual EN+AR, costs a small STT call per spoken phrase). "openwakeword" runs a
+    # local model — zero STT cost in standby, faster trigger, but phrase-only/English
+    # (needs the openwakeword package + a model; see OWW_MODEL). Falls back to "stt" if
+    # the package/model can't load.
+    WAKE_ENGINE: str = field(default_factory=lambda: _get("WAKE_ENGINE", "stt").strip().lower())
+    # openWakeWord model: a built-in name (e.g. "hey_jarvis", "alexa") or a path to a
+    # custom .onnx/.tflite trained for "Hi Robot". Built-ins won't match "Hi Robot" —
+    # train one (see CONTROL_PANEL.md / openWakeWord docs) and point OWW_MODEL at it.
+    OWW_MODEL: str = field(default_factory=lambda: _get("OWW_MODEL", "hey_jarvis"))
+    OWW_THRESHOLD: float = field(default_factory=lambda: _get_float("OWW_THRESHOLD", 0.5))
+    OWW_INFERENCE_FRAMEWORK: str = field(default_factory=lambda: _get("OWW_INFERENCE_FRAMEWORK", "onnx"))
 
     # ---- Robot / DDS ----
     ROBOT_ENABLED: bool = field(default_factory=lambda: _get_bool("ROBOT_ENABLED", True))
@@ -169,6 +185,7 @@ class Settings:
             "OPENROUTER_API_KEY": mask(self.OPENROUTER_API_KEY),
             "ELEVENLABS_API_KEY": mask(self.ELEVENLABS_API_KEY),
             "LLM_BACKEND": self.LLM_BACKEND,
+            "STREAMING_ENABLED": self.STREAMING_ENABLED,
             "OPENROUTER_MODEL": self.OPENROUTER_MODEL,
             "OPENAI_STT_MODEL": self.OPENAI_STT_MODEL,
             "ELEVENLABS_MODEL": self.ELEVENLABS_MODEL,

@@ -18,15 +18,26 @@ manages the feature (scripts, knowledge, instructions, env/keys/voice, live logs
 - Tunable via `TALK_GESTURES_ENABLED`, `TALK_GESTURE_GAP_MS`,
   `TALK_GESTURE_MAX_PER_REPLY` (safety cap), `TALK_GESTURE_IDS` (id override).
 
-### Added
+### Added — lower latency
+- **Streaming replies** (`STREAMING_ENABLED`, default on): the LLM reply is streamed
+  (OpenAI SSE, `LLMEngine.stream()`), split into sentences, and spoken as each one is
+  ready — the robot starts talking after sentence 1 instead of after the whole reply +
+  whole TTS. Producer/consumer in `pipeline._stream_speak`; the talk-gesture loop spans
+  the entire reply. Auto-falls back to the one-shot path if streaming yields nothing.
+
+### Added — wake word
+- **Selectable wake engine** `WAKE_ENGINE=stt|openwakeword`. Default `stt` (bilingual,
+  unchanged). `openwakeword` runs a local model in standby (no STT cost, faster, offline,
+  English/phrase-only) — `audio/wake_audio.py`, opt-in, graceful fallback to `stt`.
+
+### Added — config & editability
 - **Editable instructions:** persona moved out of code into `prompts/persona.md`
   (built-in fallback kept); `ConversationManager.reload_persona()`.
 - **Per-turn event log** `logs/events.jsonl` (`app/metrics.py`) — transcript +
   rough cost source for the control panel; best-effort, never disturbs a turn.
 
 ### In progress (this iteration)
-- Web control panel (FastAPI) · clean-env setup + `doctor.py` · git repo + GitHub ·
-  streaming low-latency speech · selectable offline wake word.
+- Web control panel (FastAPI) · clean-env setup + `doctor.py` · git repo + GitHub push.
 
 ## [0.1.0] — 2026-06-10 — Initial build + first working hardware demo ✅
 

@@ -81,6 +81,18 @@ def build_mic() -> MicSource:
     return HostMic(settings.SAMPLE_RATE, settings.MIC_DEVICE)
 
 
+def build_wake_audio():
+    """Offline wake detector (openWakeWord) if WAKE_ENGINE=openwakeword, else None
+    (the controller then uses the STT wake matcher). Falls back to None on failure."""
+    if settings.WAKE_ENGINE == "openwakeword":
+        try:
+            from audio.wake_audio import OpenWakeWordDetector
+            return OpenWakeWordDetector()
+        except Exception:
+            log_exception(log, "openWakeWord unavailable — falling back to STT wake engine")
+    return None
+
+
 async def amain() -> None:
     setup_logging(settings.LOG_DIR, settings.LOG_LEVEL)
     log.info("=== G1 Interactive Voice Pipeline starting ===")
@@ -103,9 +115,12 @@ async def amain() -> None:
         # event-loop thread so a slow/unreachable robot can't stall startup.
         arm = await loop.run_in_executor(None, build_arm)
         sink = await loop.run_in_executor(None, build_sink)
+        # openWakeWord model load can take a couple seconds — keep it off the loop.
+        wake_audio = await loop.run_in_executor(None, build_wake_audio)
         mic = build_mic()  # constructor does no I/O (socket join is in open())
-        log.info("Audio sink=%s, mic=%s, arm=%s",
-                 type(sink).__name__, type(mic).__name__, type(arm).__name__)
+        log.info("Audio sink=%s, mic=%s, arm=%s, wake=%s",
+                 type(sink).__name__, type(mic).__name__, type(arm).__name__,
+                 "openWakeWord" if wake_audio else "stt")
 
         pipeline = ConversationPipeline(transcriber, llm, tts, kb, conversation, arm, sink)
         controller = Controller(
@@ -115,6 +130,7 @@ async def amain() -> None:
             conversation=conversation,
             wake_detector=WakeWordDetector(settings.WAKE_WORDS),
             arm=arm,
+            wake_audio=wake_audio,
         )
 
         run_task = asyncio.create_task(controller.run())

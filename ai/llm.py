@@ -6,8 +6,9 @@ URLs with an automatic fallback chain (same idea as ``super-star``'s AiEngine).
 """
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
-from typing import Optional
+from typing import AsyncIterator, Optional
 
 import httpx
 
@@ -95,3 +96,50 @@ class LLMEngine:
 
         log.error("All LLM endpoints failed. Last error: %s", last_error)
         return ""
+
+    async def stream(self, messages: list[ChatMessage]) -> AsyncIterator[str]:
+        """Yield assistant text deltas as they arrive (OpenAI SSE ``stream=true``).
+
+        Tries each endpoint in turn. Once an endpoint has produced any content it is
+        committed (no failover mid-reply). If every endpoint fails it simply yields
+        nothing — the caller is expected to fall back to ``complete()``.
+        """
+        payload_messages = [{"role": m.role, "content": m.content} for m in messages]
+        for ep in self.endpoints:
+            payload = {
+                "model": ep.model,
+                "messages": payload_messages,
+                "temperature": settings.LLM_TEMPERATURE,
+                "max_tokens": settings.LLM_MAX_TOKENS,
+                "stream": True,
+            }
+            headers = {"Authorization": f"Bearer {ep.api_key}", **ep.extra_headers}
+            got_any = False
+            try:
+                async with self.http.stream(
+                    "POST", ep.url, headers=headers, json=payload, timeout=60.0
+                ) as resp:
+                    if resp.status_code != 200:
+                        body = (await resp.aread())[:300]
+                        log.warning("LLM stream %s error %s: %s", ep.name, resp.status_code, body)
+                        continue
+                    async for line in resp.aiter_lines():
+                        if not line or not line.startswith("data:"):
+                            continue
+                        data = line[5:].strip()
+                        if data == "[DONE]":
+                            break
+                        try:
+                            delta = json.loads(data)["choices"][0]["delta"].get("content")
+                        except Exception:
+                            continue
+                        if delta:
+                            got_any = True
+                            yield delta
+            except Exception:
+                log_exception(log, f"LLM stream to {ep.name} failed (network)")
+                continue
+            if got_any:
+                log.info("LLM stream ok via %s (%s)", ep.name, ep.model)
+                return
+        log.error("All LLM streaming endpoints failed.")

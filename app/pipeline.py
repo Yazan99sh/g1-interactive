@@ -7,6 +7,7 @@ captured utterance, and how the robot speaks and gestures the answer.
 from __future__ import annotations
 
 import asyncio
+import re
 import time
 from dataclasses import dataclass
 from typing import Optional
@@ -29,6 +30,29 @@ _FALLBACK = {
     Language.ENGLISH: "[EMOTION:thoughtful] Sorry, I didn't catch that — could you say it again?",
     Language.ARABIC: "[EMOTION:thoughtful] عفواً، ما فهمت عليك، ممكن تعيد؟",
 }
+
+# A "sentence" = run of text up to and including a terminator (. ! ? … ؟) or newline.
+# Used to chunk the streamed reply so we can start speaking after the first sentence.
+_SENT_RE = re.compile(r"[^.!?…؟\n]*[.!?…؟\n]+")
+_EMOTION_TAG_RE = re.compile(r"\[EMOTION:\w+\]", re.IGNORECASE)
+
+
+def _strip_tag_keep_spacing(text: str) -> str:
+    """Remove a leading [EMOTION:x] tag but keep the spacing that follows it, so a
+    streamed delta isn't glued onto the previous word (parse_emotion() .strip()s)."""
+    return _EMOTION_TAG_RE.sub("", text).lstrip()
+
+
+def _extract_sentences(buf: str) -> tuple[list[str], str]:
+    """Split ``buf`` into (complete_sentences, trailing_remainder)."""
+    sentences: list[str] = []
+    last = 0
+    for m in _SENT_RE.finditer(buf):
+        chunk = buf[last:m.end()].strip()
+        if chunk:
+            sentences.append(chunk)
+        last = m.end()
+    return sentences, buf[last:]
 
 
 @dataclass
@@ -77,8 +101,11 @@ class ConversationPipeline:
             return TurnOutcome(had_speech=False)
 
         try:
-            reply = await self.think(transcription)
-            await self.respond(reply)
+            if settings.STREAMING_ENABLED:
+                reply = await self.converse_streaming(transcription)
+            else:
+                reply = await self.think(transcription)
+                await self.respond(reply)
         except Exception:
             log_exception(log, "Turn failed during think/respond")
             return TurnOutcome(had_speech=True, user_text=transcription.text, error="turn-failed")
@@ -152,6 +179,126 @@ class ConversationPipeline:
     async def _play(self, pcm: bytes, sample_rate: int) -> None:
         if pcm:
             await self.sink.play(pcm, sample_rate)
+
+    # ---- streaming think+respond (low latency) ----------------------------
+    async def converse_streaming(self, transcription: Transcription) -> Reply:
+        """Stream the LLM reply into speech sentence-by-sentence.
+
+        The robot starts talking after the *first* sentence is ready instead of
+        waiting for the whole reply + whole TTS. KB-strict verbatim answers and any
+        empty-stream case fall back to the proven one-shot path.
+        """
+        if transcription.language:
+            self.conversation.set_language(transcription.language)
+        lang = self.conversation.language
+        self.conversation.add_user(transcription.text)
+
+        # KB-strict verbatim answer — short, no need to stream.
+        if settings.KB_STRICT:
+            match = self.kb.match_faq(transcription.text, lang)
+            if match:
+                faq_answer, faq_lang = match
+                emotion, clean = parse_emotion(faq_answer)
+                self.conversation.add_assistant(clean)
+                reply = Reply(text=clean, emotion=emotion or Emotion.HAPPY,
+                              language=faq_lang or lang, from_knowledge_base=True)
+                await self.respond(reply)
+                return reply
+
+        kb_context = self.kb.context_for(transcription.text)
+        messages = self.conversation.build_messages(transcription.text, kb_context)
+
+        spoken, emotion = await self._stream_speak(messages, lang)
+        text = " ".join(spoken).strip()
+
+        if not text:
+            # Streaming produced nothing (e.g. provider doesn't support SSE) — fall
+            # back to a normal completion so the robot still answers.
+            log.warning("Streaming yielded no text — falling back to one-shot complete().")
+            raw = await self.llm.complete(messages)
+            if not raw.strip():
+                raw = _FALLBACK[lang]
+            emotion, text = parse_emotion(raw)
+            emotion = emotion or Emotion.NEUTRAL
+            reply = Reply(text=text, emotion=emotion, language=lang)
+            await self.respond(reply)
+            self.conversation.add_assistant(text)
+            return reply
+
+        self.conversation.add_assistant(text)
+        log.info("Reply [%s/%s] (streamed): %s", lang.value, emotion.value, text[:80])
+        return Reply(text=text, emotion=emotion, language=lang)
+
+    async def _stream_speak(self, messages, lang: Language) -> tuple[list[str], Emotion]:
+        """Run the LLM stream (producer) and speak sentences (consumer) concurrently,
+        gesturing for the whole duration. Returns (spoken_sentences, emotion)."""
+        queue: asyncio.Queue[Optional[str]] = asyncio.Queue()
+        state: dict[str, Emotion] = {}
+
+        async def producer() -> None:
+            buf, head, resolved = "", "", False
+            try:
+                async for delta in self.llm.stream(messages):
+                    if not delta:
+                        continue
+                    if not resolved:
+                        head += delta
+                        em, _ = parse_emotion(head)
+                        # Commit the emotion once the leading [EMOTION:x] tag is fully
+                        # seen (a ']' appeared) or it's clearly absent (got long).
+                        if em is not None or "]" in head or len(head) >= 48:
+                            state["emotion"] = em or Emotion.NEUTRAL
+                            resolved, buf = True, _strip_tag_keep_spacing(head)
+                        else:
+                            continue
+                    else:
+                        buf += delta
+                    sentences, buf = _extract_sentences(buf)
+                    for s in sentences:
+                        await queue.put(s)
+            except Exception:
+                log_exception(log, "LLM stream producer failed")
+            finally:
+                if not resolved:  # very short reply with no terminator yet
+                    em, _ = parse_emotion(head)
+                    state["emotion"] = em or Emotion.NEUTRAL
+                    buf = _strip_tag_keep_spacing(head)
+                tail = buf.strip()
+                if tail:
+                    await queue.put(tail)
+                await queue.put(None)  # sentinel: stream finished
+
+        async def consumer() -> list[str]:
+            stop = asyncio.Event()
+            talk_task: Optional[asyncio.Task] = None
+            spoken: list[str] = []
+            try:
+                while True:
+                    sentence = await queue.get()
+                    if sentence is None:
+                        break
+                    if talk_task is None:  # start gesturing on the first real audio
+                        talk_task = asyncio.create_task(
+                            self.arm.talk(state.get("emotion", Emotion.NEUTRAL), stop)
+                        )
+                    pcm, sr = await self.tts.synthesize(sentence, lang)
+                    if pcm:
+                        await self._play(pcm, sr)
+                    spoken.append(sentence)
+            finally:
+                stop.set()
+                if talk_task is not None:
+                    try:
+                        await talk_task
+                    except Exception:
+                        log.warning("talk loop error (non-fatal)", exc_info=True)
+                await self.arm.relax()
+            return spoken
+
+        prod = asyncio.create_task(producer())
+        spoken = await consumer()
+        await prod  # surface producer errors / ensure it's finished
+        return spoken, state.get("emotion", Emotion.NEUTRAL)
 
     # ---- speak an arbitrary line (used for wake-ack "Aha!") ---------------
     async def say(self, text: str, language: Language, emotion: Emotion = Emotion.HAPPY,

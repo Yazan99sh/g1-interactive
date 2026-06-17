@@ -38,6 +38,7 @@ class Controller:
         conversation: ConversationManager,
         wake_detector: WakeWordDetector,
         arm: ArmController,
+        wake_audio=None,
     ) -> None:
         self.mic = mic
         self.transcriber = transcriber
@@ -45,6 +46,9 @@ class Controller:
         self.conversation = conversation
         self.wake_detector = wake_detector
         self.arm = arm
+        # Optional offline audio wake detector (openWakeWord). When set, standby uses
+        # it instead of STT — no per-phrase transcription cost.
+        self.wake_audio = wake_audio
         self.sample_rate = mic.sample_rate
         self.state = PipelineState.STANDBY
         self._stop = False
@@ -95,7 +99,14 @@ class Controller:
     async def standby(self) -> None:
         self.state = PipelineState.STANDBY
         await self.arm.relax()
-        log.info("STANDBY — waiting for wake word…")
+        if self.wake_audio is not None:
+            log.info("STANDBY — listening for wake word (openWakeWord, offline)…")
+            await self._standby_openwakeword()
+        else:
+            log.info("STANDBY — waiting for wake word (STT)…")
+            await self._standby_stt()
+
+    async def _standby_stt(self) -> None:
         while not self._stop:
             pcm, had_speech = await record_utterance(self.mic, self._standby_segmenter())
             if not had_speech:
@@ -111,6 +122,22 @@ class Controller:
                 await self._acknowledge(lang)
                 return
             log.debug("Ignored (not a wake word): '%s'", transcription.text)
+
+    async def _standby_openwakeword(self) -> None:
+        # Feed raw mic frames to the local model — no STT in standby. The model is
+        # phrase-only, so language auto-detects on the first real turn (default EN).
+        self.wake_audio.reset()
+        while not self._stop:
+            chunk = await self.mic.read_chunk()
+            if not chunk:
+                continue
+            if self.wake_audio.feed(chunk):
+                lang = Language.ENGLISH
+                log.info("WAKE (openWakeWord)")
+                self.conversation.reset()
+                self.conversation.set_language(lang)
+                await self._acknowledge(lang)
+                return
 
     async def _acknowledge(self, language: Language) -> None:
         ack = settings.WAKE_ACK_TEXT_AR if language is Language.ARABIC else settings.WAKE_ACK_TEXT_EN
