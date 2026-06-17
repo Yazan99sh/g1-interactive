@@ -1,0 +1,17 @@
+[Unit]
+Description=G1 Interactive Voice Pipeline
+After=network-online.target sound.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=__PROJECT_DIR__
+ExecStart=__PYTHON__ main.py
+Restart=on-failure
+RestartSec=3
+# The app shuts down cleanly on SIGINT (Ctrl+C handler).
+KillSignal=SIGINT
+TimeoutStopSec=15
+
+[Install]
+WantedBy=default.target

@@ -1,0 +1,18 @@
+[Unit]
+Description=G1 Interactive Control Panel
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=__PROJECT_DIR__
+ExecStart=__PYTHON__ -m controlpanel
+Environment=PANEL_HOST=0.0.0.0
+Environment=PANEL_PORT=8800
+# Optional: set a shared token to require it on every panel request.
+# Environment=PANEL_TOKEN=change-me
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=default.target

@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>G1 Interactive — Control Panel</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo">🤖</span>
+      <div>
+        <div class="title">G1 Interactive</div>
+        <div class="subtitle">Control Panel</div>
+      </div>
+    </div>
+    <div class="proc">
+      <span id="statusBadge" class="badge badge-unknown">…</span>
+      <button id="btnStart" class="btn btn-go">Start</button>
+      <button id="btnRestart" class="btn">Restart</button>
+      <button id="btnStop" class="btn btn-stop">Stop</button>
+    </div>
+  </header>
+
+  <div id="restartBanner" class="banner hidden">
+    ⚠️ A setting changed — <b>restart</b> the pipeline to apply it.
+    <button id="btnBannerRestart" class="btn btn-tiny">Restart now</button>
+  </div>
+  <div id="toast" class="toast hidden"></div>
+
+  <div class="layout">
+    <nav class="nav">
+      <button class="navItem active" data-tab="dashboard">📊 Dashboard</button>
+      <button class="navItem" data-tab="console">🖥️ Console</button>
+      <button class="navItem" data-tab="conversation">💬 Conversation</button>
+      <button class="navItem" data-tab="knowledge">📚 Knowledge</button>
+      <button class="navItem" data-tab="instructions">🧠 Instructions</button>
+      <button class="navItem" data-tab="environment">🔑 Environment</button>
+      <button class="navItem" data-tab="scripts">⚙️ Scripts</button>
+    </nav>
+
+    <main class="content">
+      <!-- Dashboard -->
+      <section class="tab active" id="tab-dashboard">
+        <h2>Dashboard</h2>
+        <div class="cards">
+          <div class="card"><div class="card-label">Pipeline</div><div id="dashStatus" class="card-big">—</div><div id="dashMode" class="card-sub"></div></div>
+          <div class="card"><div class="card-label">Turns logged</div><div id="dashTurns" class="card-big">—</div></div>
+          <div class="card"><div class="card-label">Est. API cost</div><div id="dashCost" class="card-big">—</div><div class="card-sub">estimate</div></div>
+        </div>
+        <p class="muted" id="dashSystemd"></p>
+        <button id="btnInstallService" class="btn">Install as systemd service</button>
+      </section>
+
+      <!-- Console -->
+      <section class="tab" id="tab-console">
+        <h2>Console <span class="muted">live logs</span></h2>
+        <div class="toolbar">
+          <label>File
+            <select id="logFile"><option value="g1">g1.log (all)</option><option value="errors">errors.log</option></select>
+          </label>
+          <label>Level
+            <select id="logLevel"><option>DEBUG</option><option>INFO</option><option>WARNING</option><option>ERROR</option></select>
+          </label>
+          <button id="btnLogPause" class="btn btn-tiny">Pause</button>
+          <button id="btnLogClear" class="btn btn-tiny">Clear</button>
+        </div>
+        <pre id="logView" class="console"></pre>
+      </section>
+
+      <!-- Conversation -->
+      <section class="tab" id="tab-conversation">
+        <h2>Conversation</h2>
+        <div class="card" id="costCard">
+          <div class="card-label">Estimated cost (this log)</div>
+          <div id="costBreakdown" class="cost-grid">—</div>
+          <details><summary class="muted">Edit price table</summary>
+            <div id="priceForm" class="price-form"></div>
+            <button id="btnSavePrices" class="btn btn-tiny">Save prices</button>
+          </details>
+        </div>
+        <div id="transcript" class="transcript"></div>
+      </section>
+
+      <!-- Knowledge -->
+      <section class="tab" id="tab-knowledge">
+        <h2>Knowledge base</h2>
+        <div class="split">
+          <div class="sidelist">
+            <ul id="kbList"></ul>
+            <button id="btnKbNew" class="btn btn-tiny">+ New file</button>
+          </div>
+          <div class="editor">
+            <div class="editor-head"><span id="kbName" class="muted">Select a file…</span>
+              <span><button id="btnKbSave" class="btn btn-tiny" disabled>Save</button>
+              <button id="btnKbDelete" class="btn btn-tiny btn-stop" disabled>Delete</button></span>
+            </div>
+            <textarea id="kbContent" spellcheck="false" placeholder="Knowledge file contents (.md/.txt). FAQ format: 'Q: ...' / 'A: ...'"></textarea>
+          </div>
+        </div>
+      </section>
+
+      <!-- Instructions -->
+      <section class="tab" id="tab-instructions">
+        <h2>Instructions <span class="muted">the robot's persona / system prompt</span></h2>
+        <textarea id="personaContent" class="bigtext" spellcheck="false"></textarea>
+        <button id="btnPersonaSave" class="btn">Save instructions</button>
+      </section>
+
+      <!-- Environment -->
+      <section class="tab" id="tab-environment">
+        <h2>Environment <span class="muted">.env — keys, voice id, tunables</span></h2>
+        <div id="envGroups"></div>
+        <button id="btnEnvSave" class="btn">Save environment</button>
+        <p class="muted">Secrets show a masked preview; leave blank to keep the current value. Saving needs a restart to take effect.</p>
+      </section>
+
+      <!-- Scripts -->
+      <section class="tab" id="tab-scripts">
+        <h2>Scripts <span class="muted">diagnostics &amp; actions</span></h2>
+        <div class="split">
+          <div class="sidelist">
+            <ul id="scriptList"></ul>
+            <label class="upload">Upload .py<input id="scriptUpload" type="file" accept=".py" hidden /></label>
+          </div>
+          <div class="editor">
+            <div class="editor-head"><span id="scriptRunning" class="muted">Run a script to see its output…</span></div>
+            <pre id="scriptOutput" class="console"></pre>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
