@@ -82,10 +82,10 @@ class Settings:
     OPENROUTER_MODEL: str = field(default_factory=lambda: _get("OPENROUTER_MODEL", "openai/gpt-4o-mini"))
     OPENAI_LLM_MODEL: str = field(default_factory=lambda: _get("OPENAI_LLM_MODEL", "gpt-4o-mini"))
     LLM_TEMPERATURE: float = field(default_factory=lambda: _get_float("LLM_TEMPERATURE", 0.6))
-    # Higher than you'd expect for short replies: reasoning models (e.g. Gemini 3.x
-    # Flash) spend part of this budget "thinking", so a low cap truncates the spoken
-    # answer. The persona still keeps the *spoken* part short.
-    LLM_MAX_TOKENS: int = field(default_factory=lambda: _get_int("LLM_MAX_TOKENS", 1024))
+    # 0 = NO hard cap (recommended): the max_tokens param is omitted so the model is
+    # never cut off mid-sentence. Control reply length with instructions in
+    # prompts/persona.md instead. Set >0 only if you need a strict ceiling.
+    LLM_MAX_TOKENS: int = field(default_factory=lambda: _get_int("LLM_MAX_TOKENS", 0))
 
     # ---- STT ----
     OPENAI_STT_MODEL: str = field(default_factory=lambda: _get("OPENAI_STT_MODEL", "gpt-4o-transcribe"))

@@ -69,8 +69,9 @@ class LLMEngine:
                 "model": ep.model,
                 "messages": payload_messages,
                 "temperature": settings.LLM_TEMPERATURE,
-                "max_tokens": settings.LLM_MAX_TOKENS,
             }
+            if settings.LLM_MAX_TOKENS > 0:  # 0 = no cap (omit so nothing truncates)
+                payload["max_tokens"] = settings.LLM_MAX_TOKENS
             headers = {"Authorization": f"Bearer {ep.api_key}", **ep.extra_headers}
             try:
                 resp = await self.http.post(ep.url, headers=headers, json=payload, timeout=60.0)
@@ -110,9 +111,10 @@ class LLMEngine:
                 "model": ep.model,
                 "messages": payload_messages,
                 "temperature": settings.LLM_TEMPERATURE,
-                "max_tokens": settings.LLM_MAX_TOKENS,
                 "stream": True,
             }
+            if settings.LLM_MAX_TOKENS > 0:  # 0 = no cap (omit so nothing truncates)
+                payload["max_tokens"] = settings.LLM_MAX_TOKENS
             headers = {"Authorization": f"Bearer {ep.api_key}", **ep.extra_headers}
             got_any = False
             try:
