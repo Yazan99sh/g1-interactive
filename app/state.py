@@ -53,16 +53,23 @@ class Emotion(str, enum.Enum):
             return None
 
 
-_EMOTION_TAG = re.compile(r"\[EMOTION:(\w+)\]", re.IGNORECASE)
+# Tolerant tag matcher: catches [EMOTION:happy], [EMOTION: happy], [emotion=happy],
+# [ EMOTION : very happy ], [EMOTION] — anything an LLM might emit — so the bracket is
+# ALWAYS removed before TTS (otherwise the robot tries to *speak* the brackets).
+_EMOTION_TAG = re.compile(r"\[\s*emotion\s*[:=]?\s*([a-z_]+)?[^\]]*\]", re.IGNORECASE)
 _ARABIC_RANGE = re.compile(r"[؀-ۿݐ-ݿ]")
 
 
 def parse_emotion(text: str) -> tuple[Optional[Emotion], str]:
-    """Extract a leading ``[EMOTION:happy]`` tag; return (emotion, clean_text)."""
+    """Extract an ``[EMOTION:happy]``-style tag; return (emotion, clean_text).
+
+    Strips EVERY tag occurrence (lenient to spacing/format) so none reach the speaker.
+    """
     match = _EMOTION_TAG.search(text)
     if not match:
         return None, text.strip()
-    emotion = Emotion.from_str(match.group(1))
+    word = match.group(1)
+    emotion = Emotion.from_str(word) if word else None
     clean = _EMOTION_TAG.sub("", text).strip()
     return emotion, clean
 

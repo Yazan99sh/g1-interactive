@@ -120,6 +120,10 @@ class Settings:
     WAKE_ACK_TEXT_EN: str = field(default_factory=lambda: _get("WAKE_ACK_TEXT_EN", "Aha!"))
     WAKE_ACK_TEXT_AR: str = field(default_factory=lambda: _get("WAKE_ACK_TEXT_AR", "أها!"))
     IDLE_AFTER_SILENT_TURNS: int = field(default_factory=lambda: _get_int("IDLE_AFTER_SILENT_TURNS", 10))
+    # Session memory: on a new wake, KEEP the prior conversation if the last exchange
+    # was within this many seconds (same person continuing) — only start fresh after a
+    # longer gap (assume a new visitor). 0 = always start fresh on every wake.
+    SESSION_MEMORY_TIMEOUT_S: int = field(default_factory=lambda: _get_int("SESSION_MEMORY_TIMEOUT_S", 180))
     # Wake engine: "stt" (default) transcribes standby utterances and matches WAKE_WORDS
     # (bilingual EN+AR, costs a small STT call per spoken phrase). "openwakeword" runs a
     # local model — zero STT cost in standby, faster trigger, but phrase-only/English

@@ -7,6 +7,8 @@ the pipeline strips and turns into an arm gesture + LED colour before speaking.
 """
 from __future__ import annotations
 
+import time
+
 from app.logging_setup import get_logger
 from app.state import ChatMessage, Language
 from config import settings
@@ -64,14 +66,20 @@ class ConversationManager:
         self.language: Language = Language.ENGLISH
         self.max_turns = max_turns
         self.persona = load_persona()
+        self.last_activity = time.monotonic()
 
     def reload_persona(self) -> None:
         """Re-read prompts/persona.md (e.g. after the control panel edits it)."""
         self.persona = load_persona()
 
+    def seconds_idle(self) -> float:
+        """Seconds since the last user/assistant turn (drives session memory window)."""
+        return time.monotonic() - self.last_activity
+
     def reset(self) -> None:
         self.history.clear()
         self.language = Language.ENGLISH
+        self.last_activity = time.monotonic()
 
     def set_language(self, language: Language) -> None:
         if language and language != self.language:
@@ -80,10 +88,12 @@ class ConversationManager:
 
     def add_user(self, text: str) -> None:
         self.history.append(ChatMessage(role="user", content=text))
+        self.last_activity = time.monotonic()
         self._trim()
 
     def add_assistant(self, text: str) -> None:
         self.history.append(ChatMessage(role="assistant", content=text))
+        self.last_activity = time.monotonic()
         self._trim()
 
     def _trim(self) -> None:

@@ -117,11 +117,22 @@ class Controller:
             if self.wake_detector.matches(transcription.text):
                 lang = transcription.language or detect_language(transcription.text) or Language.ENGLISH
                 log.info("WAKE — heard '%s' (%s)", transcription.text, lang.value)
-                self.conversation.reset()
-                self.conversation.set_language(lang)
+                self._begin_session(lang)
                 await self._acknowledge(lang)
                 return
             log.debug("Ignored (not a wake word): '%s'", transcription.text)
+
+    def _begin_session(self, lang: Language) -> None:
+        """Start a conversation on wake — keep prior history if the last exchange was
+        recent (same person continuing), else reset (a new visitor)."""
+        timeout = settings.SESSION_MEMORY_TIMEOUT_S
+        if timeout <= 0 or not self.conversation.history or self.conversation.seconds_idle() > timeout:
+            self.conversation.reset()
+            log.info("New conversation (fresh memory).")
+        else:
+            log.info("Continuing conversation — memory kept (idle %.0fs ≤ %ds).",
+                     self.conversation.seconds_idle(), timeout)
+        self.conversation.set_language(lang)
 
     async def _standby_openwakeword(self) -> None:
         # Feed raw mic frames to the local model — no STT in standby. The model is
@@ -134,8 +145,7 @@ class Controller:
             if self.wake_audio.feed(chunk):
                 lang = Language.ENGLISH
                 log.info("WAKE (openWakeWord)")
-                self.conversation.reset()
-                self.conversation.set_language(lang)
+                self._begin_session(lang)
                 await self._acknowledge(lang)
                 return
 

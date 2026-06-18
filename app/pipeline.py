@@ -19,7 +19,7 @@ from ai.tts import ElevenLabsTTS
 from app.conversation import ConversationManager
 from app.logging_setup import get_logger, log_exception
 from app.metrics import record_event
-from app.state import Emotion, Language, Reply, Transcription, parse_emotion
+from app.state import Emotion, Language, Reply, Transcription, parse_emotion, _EMOTION_TAG
 from audio.sink import AudioSink
 from config import settings
 from robot.interfaces import ArmController
@@ -34,13 +34,13 @@ _FALLBACK = {
 # A "sentence" = run of text up to and including a terminator (. ! ? … ؟) or newline.
 # Used to chunk the streamed reply so we can start speaking after the first sentence.
 _SENT_RE = re.compile(r"[^.!?…؟\n]*[.!?…؟\n]+")
-_EMOTION_TAG_RE = re.compile(r"\[EMOTION:\w+\]", re.IGNORECASE)
 
 
 def _strip_tag_keep_spacing(text: str) -> str:
-    """Remove a leading [EMOTION:x] tag but keep the spacing that follows it, so a
-    streamed delta isn't glued onto the previous word (parse_emotion() .strip()s)."""
-    return _EMOTION_TAG_RE.sub("", text).lstrip()
+    """Remove the [EMOTION:x] tag(s) but keep the spacing that follows, so a streamed
+    delta isn't glued onto the previous word (parse_emotion() .strip()s). Uses the same
+    tolerant matcher as parse_emotion so odd formats never reach the speaker."""
+    return _EMOTION_TAG.sub("", text).lstrip()
 
 
 def _extract_sentences(buf: str) -> tuple[list[str], str]:
