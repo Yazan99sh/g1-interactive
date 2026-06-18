@@ -171,6 +171,14 @@ class Settings:
     # let the kernel pick (may join the wrong NIC -> no robot-mic audio).
     ROBOT_MIC_IFACE_IP: str = field(default_factory=lambda: _get("ROBOT_MIC_IFACE_IP", ""))
 
+    # ---- Head LED (state indicator) ----
+    # Colour the G1 head LED by pipeline state. Each is "R,G,B" (0-255).
+    HEAD_LED_ENABLED: bool = field(default_factory=lambda: _get_bool("HEAD_LED_ENABLED", True))
+    LED_STANDBY: list[int] = field(default_factory=lambda: _get_int_list("LED_STANDBY", "0,0,0"))
+    LED_LISTENING: list[int] = field(default_factory=lambda: _get_int_list("LED_LISTENING", "0,0,255"))
+    LED_THINKING: list[int] = field(default_factory=lambda: _get_int_list("LED_THINKING", "255,140,0"))
+    LED_SPEAKING: list[int] = field(default_factory=lambda: _get_int_list("LED_SPEAKING", "0,200,0"))
+
     # ---- Knowledge base ----
     KB_STRICT: bool = field(default_factory=lambda: _get_bool("KB_STRICT", False))
 

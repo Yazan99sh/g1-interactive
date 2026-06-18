@@ -44,7 +44,20 @@ class G1Speaker(AudioSink):
             log_exception(log, "SetVolume failed (non-fatal)")
         self._stop_flag = False
         self._rpc_lock = threading.Lock()  # AudioClient isn't thread-safe; serialise RPCs
+        self._last_led: tuple[int, int, int] | None = None
         log.info("G1Speaker ready (volume=%d).", settings.ROBOT_SPEAKER_VOLUME)
+
+    def set_led(self, r: int, g: int, b: int) -> None:
+        """Set the head LED (0-255). De-duped so we don't spam identical RPCs."""
+        color = (max(0, min(255, int(r))), max(0, min(255, int(g))), max(0, min(255, int(b))))
+        if color == self._last_led:
+            return
+        self._last_led = color
+        try:
+            with self._rpc_lock:
+                self._client.LedControl(*color)
+        except Exception:
+            log_exception(log, "LedControl failed (non-fatal)")
 
     # ---- AudioSink ----
     async def play(self, pcm: bytes, sample_rate: int) -> None:
@@ -75,11 +88,8 @@ class G1Speaker(AudioSink):
         if len(pcm) % 2:
             pcm = pcm[:-1]  # never split a 16-bit sample
         stream_id = str(int(time.time() * 1000))
-        try:
-            with self._rpc_lock:
-                self._client.LedControl(0, 255, 0)  # green = speaking
-        except Exception:
-            pass
+        # NB: the head LED is now driven by pipeline STATE (set_led), not here, so it
+        # can show listening/thinking/speaking — not just on/off during playback.
         try:
             for off in range(0, len(pcm), CHUNK_MAX):
                 if self._stop_flag:
@@ -91,12 +101,6 @@ class G1Speaker(AudioSink):
                 time.sleep(len(chunk) / BYTES_PER_S * 0.9)
         except Exception:
             log_exception(log, "PlayStream failed")
-        finally:
-            try:
-                with self._rpc_lock:
-                    self._client.LedControl(0, 0, 0)  # off when done
-            except Exception:
-                pass
 
     @staticmethod
     def _ensure_16k(pcm: bytes, in_rate: int, in_ch: int = 1, in_width: int = 2) -> bytes:

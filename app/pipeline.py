@@ -82,6 +82,14 @@ class ConversationPipeline:
         self.arm = arm
         self.sink = sink
 
+    def _set_led(self, color: list[int]) -> None:
+        """Colour the head LED for the current state (best-effort, no-op off-robot)."""
+        if settings.HEAD_LED_ENABLED and len(color) == 3:
+            try:
+                self.sink.set_led(*color)
+            except Exception:
+                pass
+
     # ---- listening result -> spoken reply ---------------------------------
     async def handle_audio(self, pcm: bytes, sample_rate: int) -> TurnOutcome:
         """Full turn for a captured utterance. Empty transcription => no_speech."""
@@ -158,6 +166,7 @@ class ConversationPipeline:
 
     # ---- respond (speak + gesture together) -------------------------------
     async def respond(self, reply: Reply) -> None:
+        self._set_led(settings.LED_SPEAKING)
         pcm, sr = await self.tts.synthesize(reply.text, reply.language)
         if not pcm:
             log.warning("TTS produced no audio; gesturing only.")
@@ -277,7 +286,8 @@ class ConversationPipeline:
                     sentence = await queue.get()
                     if sentence is None:
                         break
-                    if talk_task is None:  # start gesturing on the first real audio
+                    if talk_task is None:  # first real audio: go green + start gesturing
+                        self._set_led(settings.LED_SPEAKING)
                         talk_task = asyncio.create_task(
                             self.arm.talk(state.get("emotion", Emotion.NEUTRAL), stop)
                         )

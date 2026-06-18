@@ -28,6 +28,9 @@ class AudioSink(ABC):
     def stop(self) -> None:
         """Interrupt any in-progress playback (barge-in)."""
 
+    def set_led(self, r: int, g: int, b: int) -> None:
+        """Set the robot's head LED colour (0-255). No-op for non-robot sinks."""
+
     async def close(self) -> None:
         """Release resources."""
 
