@@ -163,10 +163,15 @@ firmware-dependent; see the deployment runbook and `g1-teleop/06-runbook.md`.
 * No acoustic echo cancellation yet — the mic is flushed during playback to avoid
   self-triggering, so the user can't barge in mid-reply. Add AEC or a robot-mic
   with onboard AEC later.
-* Streaming is now on by default (`STREAMING_ENABLED`): the reply is streamed and
-  spoken sentence-by-sentence so the robot starts talking after the first sentence.
-* Talking gestures loop continuously for the whole reply (`TALK_GESTURE_*`) instead
-  of one quick wave; gesture ids are firmware presets — confirm with
-  `tools/g1_list_actions.py`.
+* Streaming is on by default (`STREAMING_ENABLED`): the reply is streamed and spoken
+  sentence-by-sentence so the robot starts talking after the first sentence. **Chunked
+  speech** (`TTS_CHUNKING_ENABLED`) additionally splits a long reply into small pieces
+  sent to TTS one at a time (prefetched) for fast first audio — both toggle from the
+  panel's Speech tab.
+* The robot does **one** arm move when it starts talking (`TALK_GESTURE_IDS`, default
+  right-hand-up) and waves near its head on wake (`WAKE_GESTURE_ID`); pick both from the
+  panel's Gestures tab. Ids are firmware presets — confirm with `tools/g1_list_actions.py`.
+* The head LED shows state by colour (standby blue · listening green · thinking amber,
+  breathing · speaking magenta · error red); colours are editable in the Environment tab.
 * Knowledge retrieval is keyword-based (no embeddings) — great for a small curated
   KB; swap in embeddings if the KB grows large.

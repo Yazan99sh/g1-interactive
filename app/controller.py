@@ -25,6 +25,7 @@ from audio.wake import WakeWordDetector
 from ai.stt import OpenAITranscriber
 from config import settings
 from robot.interfaces import ArmController
+from robot.led import LedIndicator
 
 log = get_logger("app.controller")
 
@@ -39,6 +40,7 @@ class Controller:
         wake_detector: WakeWordDetector,
         arm: ArmController,
         wake_audio=None,
+        led: LedIndicator | None = None,
     ) -> None:
         self.mic = mic
         self.transcriber = transcriber
@@ -46,6 +48,9 @@ class Controller:
         self.conversation = conversation
         self.wake_detector = wake_detector
         self.arm = arm
+        # Head-LED state indicator — share the same instance the pipeline uses so
+        # standby/listening/thinking (here) and speaking (pipeline) all drive one LED.
+        self.led = led or pipeline.led
         # Optional offline audio wake detector (openWakeWord). When set, standby uses
         # it instead of STT — no per-phrase transcription cost.
         self.wake_audio = wake_audio
@@ -72,6 +77,7 @@ class Controller:
     # ---- lifecycle --------------------------------------------------------
     async def run(self) -> None:
         await self.mic.open()
+        await self.led.start()
         log.info("Controller running. Say one of %s to wake the robot.", settings.WAKE_WORDS)
         try:
             while not self._stop:
@@ -80,6 +86,7 @@ class Controller:
                     break
                 await self.converse()
         finally:
+            await self.led.stop()
             await self.mic.close()
             await self.arm.close()
             await self.pipeline.sink.close()
@@ -96,18 +103,10 @@ class Controller:
             pass
 
     # ---- STANDBY ----------------------------------------------------------
-    def _led(self, color: list[int]) -> None:
-        """Set the head LED for the current state (best-effort, no-op off-robot)."""
-        if settings.HEAD_LED_ENABLED and len(color) == 3:
-            try:
-                self.pipeline.sink.set_led(*color)
-            except Exception:
-                pass
-
     async def standby(self) -> None:
         self.state = PipelineState.STANDBY
         await self.arm.relax()
-        self._led(settings.LED_STANDBY)
+        self.led.set_state("standby")
         if self.wake_audio is not None:
             log.info("STANDBY — listening for wake word (openWakeWord, offline)…")
             await self._standby_openwakeword()
@@ -159,7 +158,7 @@ class Controller:
                 return
 
     async def _acknowledge(self, language: Language) -> None:
-        self._led(settings.LED_SPEAKING)
+        self.led.set_state("speaking")
         ack = settings.WAKE_ACK_TEXT_AR if language is Language.ARABIC else settings.WAKE_ACK_TEXT_EN
         try:
             # Wave hello and say "Aha!" at the same time (one failing branch must
@@ -180,7 +179,7 @@ class Controller:
         log.info("CONVERSE — listening (idle after %d silent turns).", limit)
         while not self._stop and silent < limit:
             self.state = PipelineState.LISTENING
-            self._led(settings.LED_LISTENING)
+            self.led.set_state("listening")
             pcm, had_speech = await record_utterance(self.mic, self._active_segmenter())
             if not had_speech:
                 silent += 1
@@ -188,8 +187,11 @@ class Controller:
                 continue
 
             self.state = PipelineState.THINKING
-            self._led(settings.LED_THINKING)
+            self.led.set_state("thinking")
             outcome = await self.pipeline.handle_audio(pcm, self.sample_rate)
+            if outcome.error:
+                # Blink red briefly so a failure is visible, then carry on listening.
+                await self.led.flash("error", 600)
             if not outcome.had_speech:
                 silent += 1
                 log.info("Silent turn %d/%d (blank transcription)", silent, limit)

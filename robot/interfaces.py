@@ -31,12 +31,11 @@ class ArmController(ABC):
         """Play a single friendly gesture matching ``emotion`` (one-shot)."""
 
     async def talk(self, emotion: Emotion, stop: asyncio.Event) -> None:
-        """Keep gesturing for as long as the robot is speaking.
+        """Do one move as the robot starts talking, then hold until ``stop`` is set.
 
         Runs concurrently with audio playback and must return promptly once
-        ``stop`` is set (the speech finished). The default is a single
-        :meth:`express` then waiting for ``stop`` — real arms override this with a
-        loop so the robot moves the *whole* time it talks (see ``G1ArmGestures``).
+        ``stop`` is set (the speech finished). The default expresses ``emotion`` once
+        then waits; ``G1ArmGestures`` overrides it to use the configured talk gesture.
         """
         if not stop.is_set():
             await self.express(emotion)

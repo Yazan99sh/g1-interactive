@@ -7,6 +7,7 @@ from app.state import parse_emotion, detect_language, Emotion, Language
 from audio.wake import WakeWordDetector
 from audio.vad import UtteranceSegmenter
 from ai.knowledge_base import KnowledgeBase
+from ai.text_chunk import split_for_tts
 from app.conversation import ConversationManager
 from config import settings
 
@@ -65,6 +66,27 @@ check("convo msgs", msgs[0].role == "system" and "Arabic" in msgs[0].content and
 # 8. full module graph imports (no network calls)
 import ai.stt, ai.tts, ai.llm, app.pipeline, app.controller, audio.mic, audio.sink  # noqa
 check("imports", True)
+
+# 9. TTS chunk splitter (for faster first audio)
+check("chunk short", split_for_tts("Hello there.", 180) == ["Hello there."])
+check("chunk empty", split_for_tts("   ", 180) == [])
+_long = "A" * 50 + ". " + "B" * 50 + ". " + "C" * 50 + ". " + "D" * 50 + "."
+_pieces = split_for_tts(_long, 80)
+check("chunk splits long", len(_pieces) >= 3)
+check("chunk respects max", all(len(p) <= 80 for p in _pieces))
+check("chunk nonempty", all(p.strip() for p in _pieces))
+# never split inside a word
+_wp = split_for_tts(" ".join(["word"] * 60), 50)
+check("chunk no midword", all(all(t == "word" for t in p.split()) for p in _wp))
+# Arabic terminator/comma aware
+_ar = split_for_tts("مرحبا، كيف حالك؟ أنا بخير شكرا لك جزيلا على هذا السؤال اللطيف.", 16)
+check("chunk arabic", len(_ar) >= 2 and all(p.strip() for p in _ar))
+
+# 10. LED indicator is a safe no-op without a sink
+from robot.led import LedIndicator  # noqa: E402
+_led = LedIndicator(None)
+_led.set_state("thinking"); _led.set_state("speaking")  # must not raise
+check("led noop", _led._enabled is False)
 
 print("\nALL PASS" if ok else "\nSOME FAILED")
 sys.exit(0 if ok else 1)

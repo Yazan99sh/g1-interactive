@@ -37,6 +37,7 @@
       <button class="navItem" data-tab="knowledge">📚 Knowledge</button>
       <button class="navItem" data-tab="instructions">🧠 Instructions</button>
       <button class="navItem" data-tab="gestures">🤖 Gestures</button>
+      <button class="navItem" data-tab="speech">⚡ Speech</button>
       <button class="navItem" data-tab="environment">🔑 Environment</button>
       <button class="navItem" data-tab="scripts">⚙️ Scripts</button>
     </nav>
@@ -111,17 +112,34 @@
 
       <!-- Gestures -->
       <section class="tab" id="tab-gestures">
-        <h2>Gestures <span class="muted">arm moves while talking + on wake</span></h2>
+        <h2>Gestures <span class="muted">one arm move while talking + the wake greeting</span></h2>
         <div class="card">
-          <div class="card-label">While speaking (cycled in order)</div>
-          <div id="talkGestures" class="gesture-grid"></div>
+          <div class="card-label">Move when the robot starts talking (one move)</div>
+          <select id="talkGesture"></select>
         </div>
         <div class="card">
-          <div class="card-label">Wake greeting ("Aha!")</div>
+          <div class="card-label">Meet &amp; greet — wake wave ("Aha!")</div>
           <select id="wakeGesture"></select>
         </div>
         <button id="btnGesturesSave" class="btn">Save gestures</button>
         <p class="muted">Confirm ids on your robot with <code>tools/g1_list_actions.py</code>. Takes effect on restart.</p>
+      </section>
+
+      <!-- Speech -->
+      <section class="tab" id="tab-speech">
+        <h2>Speech <span class="muted">how fast the robot starts talking</span></h2>
+        <div class="card">
+          <label class="toggle"><input type="checkbox" id="spStreaming"> Stream the reply into speech sentence-by-sentence</label>
+          <p class="muted">The robot starts talking as soon as the first sentence is ready (lowest perceived latency).</p>
+        </div>
+        <div class="card">
+          <label class="toggle"><input type="checkbox" id="spChunking"> Chunk long replies — send to the voice piece by piece</label>
+          <p class="muted">Splits a long answer into small pieces so the first audio plays almost immediately; the next piece is prepared while the current one plays, so there's no gap and no waiting.</p>
+          <div class="envField"><label for="spChunkChars">Max characters per piece</label>
+            <input id="spChunkChars" type="number" min="40" max="600" step="10"></div>
+        </div>
+        <button id="btnSpeechSave" class="btn">Save speech settings</button>
+        <p class="muted">Takes effect on restart.</p>
       </section>
 
       <!-- Environment -->

@@ -29,6 +29,7 @@ from audio.sink import AudioSink, HostSpeaker
 from audio.wake import WakeWordDetector
 from config import settings
 from robot.interfaces import ArmController, NullArmController
+from robot.led import LedIndicator
 
 log = get_logger("main")
 
@@ -122,7 +123,8 @@ async def amain() -> None:
                  type(sink).__name__, type(mic).__name__, type(arm).__name__,
                  "openWakeWord" if wake_audio else "stt")
 
-        pipeline = ConversationPipeline(transcriber, llm, tts, kb, conversation, arm, sink)
+        led = LedIndicator(sink)  # head-LED state indicator (shared by both)
+        pipeline = ConversationPipeline(transcriber, llm, tts, kb, conversation, arm, sink, led=led)
         controller = Controller(
             mic=mic,
             transcriber=transcriber,
@@ -131,6 +133,7 @@ async def amain() -> None:
             wake_detector=WakeWordDetector(settings.WAKE_WORDS),
             arm=arm,
             wake_audio=wake_audio,
+            led=led,
         )
 
         run_task = asyncio.create_task(controller.run())

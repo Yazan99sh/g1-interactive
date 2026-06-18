@@ -9,12 +9,14 @@ from __future__ import annotations
 import asyncio
 import re
 import time
+from collections import deque
 from dataclasses import dataclass
 from typing import Optional
 
 from ai.knowledge_base import KnowledgeBase
 from ai.llm import LLMEngine
 from ai.stt import OpenAITranscriber
+from ai.text_chunk import split_for_tts
 from ai.tts import ElevenLabsTTS
 from app.conversation import ConversationManager
 from app.logging_setup import get_logger, log_exception
@@ -23,6 +25,7 @@ from app.state import Emotion, Language, Reply, Transcription, parse_emotion, _E
 from audio.sink import AudioSink
 from config import settings
 from robot.interfaces import ArmController
+from robot.led import LedIndicator
 
 log = get_logger("app.pipeline")
 
@@ -73,6 +76,7 @@ class ConversationPipeline:
         conversation: ConversationManager,
         arm: ArmController,
         sink: AudioSink,
+        led: Optional[LedIndicator] = None,
     ) -> None:
         self.transcriber = transcriber
         self.llm = llm
@@ -81,14 +85,8 @@ class ConversationPipeline:
         self.conversation = conversation
         self.arm = arm
         self.sink = sink
-
-    def _set_led(self, color: list[int]) -> None:
-        """Colour the head LED for the current state (best-effort, no-op off-robot)."""
-        if settings.HEAD_LED_ENABLED and len(color) == 3:
-            try:
-                self.sink.set_led(*color)
-            except Exception:
-                pass
+        # Shared with the controller; off-robot/dev defaults to a no-op indicator.
+        self.led = led or LedIndicator(None)
 
     # ---- listening result -> spoken reply ---------------------------------
     async def handle_audio(self, pcm: bytes, sample_rate: int) -> TurnOutcome:
@@ -166,24 +164,63 @@ class ConversationPipeline:
 
     # ---- respond (speak + gesture together) -------------------------------
     async def respond(self, reply: Reply) -> None:
-        self._set_led(settings.LED_SPEAKING)
-        pcm, sr = await self.tts.synthesize(reply.text, reply.language)
-        if not pcm:
-            log.warning("TTS produced no audio; gesturing only.")
-        # The arms gesture in a LOOP for the whole duration of the speech (not one
-        # quick wave then frozen). ``stop`` is set the moment playback ends; the
-        # talk loop is best-effort and must never cancel the core speech.
+        """Speak a fully-known reply with one arm move; chunk long text for low latency."""
+        await self._speak(reply.text, reply.language, reply.emotion or Emotion.NEUTRAL)
+
+    async def _speak(self, text: str, language: Language, emotion: Emotion) -> None:
+        """Set the speaking LED, do ONE arm move (held for the whole reply), and play
+        the speech — chunked into small pieces if it's long so audio starts fast."""
+        self.led.set_state("speaking")
+        # ``stop`` is set the instant playback ends; the gesture is best-effort and
+        # must never cancel the core speech.
         stop = asyncio.Event()
-        talk_task = asyncio.create_task(self.arm.talk(reply.emotion, stop))
+        talk_task = asyncio.create_task(self.arm.talk(emotion, stop))
         try:
-            await self._play(pcm, sr)
+            if settings.TTS_CHUNKING_ENABLED and len(text) > settings.TTS_CHUNK_MAX_CHARS:
+                await self._play_chunked(text, language)
+            else:
+                pcm, sr = await self.tts.synthesize(text, language)
+                if not pcm:
+                    log.warning("TTS produced no audio; gesturing only.")
+                await self._play(pcm, sr)
         finally:
             stop.set()
             try:
                 await talk_task
             except Exception:
-                log.warning("talk loop error (non-fatal)", exc_info=True)
+                log.warning("talk gesture error (non-fatal)", exc_info=True)
             await self.arm.relax()
+
+    async def _play_chunked(self, text: str, language: Language) -> None:
+        """Synthesize the reply in small pieces and play them back-to-back, prefetching
+        the next piece while the current one plays — so first audio starts fast and
+        there's no gap between pieces."""
+        pieces = split_for_tts(text, settings.TTS_CHUNK_MAX_CHARS)
+        if not pieces:
+            return
+        log.info("Chunked TTS: %d piece(s) (≤%d chars each).", len(pieces), settings.TTS_CHUNK_MAX_CHARS)
+        next_task = asyncio.create_task(self.tts.synthesize(pieces[0], language))
+        try:
+            for i in range(len(pieces)):
+                try:
+                    pcm, sr = await next_task
+                except Exception:
+                    log_exception(log, "Chunk TTS failed (skipping piece)")
+                    pcm, sr = b"", self.tts.sample_rate
+                # Kick off the next piece's synth before we start playing this one.
+                next_task = (
+                    asyncio.create_task(self.tts.synthesize(pieces[i + 1], language))
+                    if i + 1 < len(pieces) else None
+                )
+                if pcm:
+                    await self._play(pcm, sr)
+        finally:
+            if next_task is not None:
+                next_task.cancel()
+                try:
+                    await next_task
+                except BaseException:
+                    pass
 
     async def _play(self, pcm: bytes, sample_rate: int) -> None:
         if pcm:
@@ -281,33 +318,80 @@ class ConversationPipeline:
             stop = asyncio.Event()
             talk_task: Optional[asyncio.Task] = None
             spoken: list[str] = []
-            try:
-                while True:
+            parts: deque[str] = deque()        # pending pieces of the current sentence
+            finished = False                   # producer sentinel reached
+
+            async def next_piece() -> Optional[str]:
+                """Next speakable piece in order; pulls a sentence (splitting a run-on
+                one) when the buffer is empty. None once the stream is exhausted."""
+                nonlocal finished
+                while not parts:
+                    if finished:
+                        return None
                     sentence = await queue.get()
                     if sentence is None:
-                        break
-                    if talk_task is None:  # first real audio: go green + start gesturing
-                        self._set_led(settings.LED_SPEAKING)
+                        finished = True
+                        return None
+                    spoken.append(sentence)
+                    if settings.TTS_CHUNKING_ENABLED and len(sentence) > settings.TTS_CHUNK_MAX_CHARS:
+                        parts.extend(split_for_tts(sentence, settings.TTS_CHUNK_MAX_CHARS))
+                    else:
+                        parts.append(sentence)
+                return parts.popleft()
+
+            async def fetch_and_synth():
+                piece = await next_piece()
+                if piece is None:
+                    return None
+                return await self.tts.synthesize(piece, lang)
+
+            prefetch: Optional[asyncio.Task] = None
+            try:
+                # Synth the first piece, then keep synthesising the NEXT piece while the
+                # current one plays — first audio starts fast and there's no gap between
+                # pieces (the prefetch overlaps playback, even on the streaming path).
+                result = await fetch_and_synth()
+                while result is not None:
+                    if talk_task is None:  # first real audio: light up + do one move
+                        self.led.set_state("speaking")
                         talk_task = asyncio.create_task(
                             self.arm.talk(state.get("emotion", Emotion.NEUTRAL), stop)
                         )
-                    pcm, sr = await self.tts.synthesize(sentence, lang)
+                    pcm, sr = result
+                    prefetch = asyncio.create_task(fetch_and_synth())
                     if pcm:
                         await self._play(pcm, sr)
-                    spoken.append(sentence)
+                    result = await prefetch
+                    prefetch = None
             finally:
+                if prefetch is not None:
+                    prefetch.cancel()
+                    try:
+                        await prefetch
+                    except BaseException:
+                        pass
                 stop.set()
                 if talk_task is not None:
                     try:
                         await talk_task
                     except Exception:
-                        log.warning("talk loop error (non-fatal)", exc_info=True)
+                        log.warning("talk gesture error (non-fatal)", exc_info=True)
                 await self.arm.relax()
             return spoken
 
         prod = asyncio.create_task(producer())
-        spoken = await consumer()
-        await prod  # surface producer errors / ensure it's finished
+        try:
+            spoken = await consumer()
+        finally:
+            # Always tear the producer (and its open LLM stream) down — whether the
+            # consumer finished, raised, or was cancelled. On success prod is already
+            # done, so awaiting it just surfaces any producer error.
+            if not prod.done():
+                prod.cancel()
+            try:
+                await prod
+            except (asyncio.CancelledError, Exception):
+                pass
         return spoken, state.get("emotion", Emotion.NEUTRAL)
 
     # ---- speak an arbitrary line (used for wake-ack "Aha!") ---------------

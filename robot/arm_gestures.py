@@ -30,10 +30,11 @@ FACE_WAVE = 25
 HIGH_WAVE = 26
 CLAP = 17
 SHAKE = 27
+RIGHT_HAND_UP = 23
 RELEASE = 99
 
 # Which gesture to play for each reply emotion (None = stay still for that mood).
-# Used by the one-shot express(); the talking loop uses TALK_PALETTE below.
+# Used by the one-shot express() (e.g. emotion gesture in say()).
 GESTURE_FOR_EMOTION: dict[Emotion, int | None] = {
     Emotion.HAPPY: FACE_WAVE,
     Emotion.EXCITED: CLAP,
@@ -47,22 +48,21 @@ GESTURE_FOR_EMOTION: dict[Emotion, int | None] = {
     Emotion.SLEEPY: None,
 }
 
-# Gestures cycled *continuously while the robot is talking* (see talk()). Unlike
-# GESTURE_FOR_EMOTION, every mood has at least one gesture so the robot is NEVER
-# frozen mid-reply — that was the "no movement while responding" bug. Expressive
-# moods get a livelier palette; quieter moods get a single calm wave on repeat.
-_CALM = [FACE_WAVE]
-TALK_PALETTE: dict[Emotion, list[int]] = {
-    Emotion.HAPPY: [FACE_WAVE, HIGH_WAVE],
-    Emotion.EXCITED: [HIGH_WAVE, CLAP],
-    Emotion.PLAYFUL: [HIGH_WAVE, FACE_WAVE, SHAKE],
-    Emotion.CURIOUS: [FACE_WAVE, SHAKE],
-    Emotion.SURPRISED: [HIGH_WAVE, CLAP],
-    Emotion.THOUGHTFUL: _CALM,
-    Emotion.NEUTRAL: _CALM,
-    Emotion.SAD: _CALM,
-    Emotion.ANGRY: _CALM,
-    Emotion.SLEEPY: _CALM,
+# The single move the robot does when it STARTS talking. Used only when
+# TALK_GESTURE_IDS is empty (normally that config gives the one move directly);
+# every mood maps to a gesture so the robot is never frozen as it begins to speak.
+_DEFAULT_TALK_GESTURE = RIGHT_HAND_UP
+TALK_GESTURE_FOR_EMOTION: dict[Emotion, int] = {
+    Emotion.HAPPY: FACE_WAVE,
+    Emotion.EXCITED: CLAP,
+    Emotion.PLAYFUL: HIGH_WAVE,
+    Emotion.CURIOUS: RIGHT_HAND_UP,
+    Emotion.SURPRISED: HIGH_WAVE,
+    Emotion.THOUGHTFUL: RIGHT_HAND_UP,
+    Emotion.NEUTRAL: RIGHT_HAND_UP,
+    Emotion.SAD: RIGHT_HAND_UP,
+    Emotion.ANGRY: RIGHT_HAND_UP,
+    Emotion.SLEEPY: RIGHT_HAND_UP,
 }
 
 
@@ -108,40 +108,21 @@ class G1ArmGestures(ArmController):
         await self._execute(action, f"express:{emotion.value}")
 
     async def talk(self, emotion: Emotion, stop: asyncio.Event) -> None:
-        """Cycle gestures until ``stop`` is set, so the arms move the whole time the
-        robot speaks. Each ExecuteAction is a blocking preset that plays to
-        completion; we check ``stop`` between actions and bail out of the inter-
-        gesture pause the instant speech ends. Best-effort — never raises."""
+        """Do ONE arm move the moment the robot starts talking, then hold the pose
+        until ``stop`` is set (speech finished) — "one move is enough", no looping.
+        Best-effort — never raises; if disabled it just waits for ``stop``."""
         if stop.is_set() or not settings.TALK_GESTURES_ENABLED:
             await stop.wait()
             return
-        palette = self._talk_palette(emotion)
-        if not palette:
-            await stop.wait()
-            return
-        gap = max(0.0, settings.TALK_GESTURE_GAP_MS / 1000.0)
-        cap = settings.TALK_GESTURE_MAX_PER_REPLY
-        played = 0
-        i = 0
-        while not stop.is_set() and (cap <= 0 or played < cap):
-            await self._execute(palette[i % len(palette)], f"talk:{emotion.value}")
-            played += 1
-            i += 1
-            if stop.is_set() or gap == 0.0:
-                continue
-            # Pause between gestures, but wake immediately when speech ends.
-            try:
-                await asyncio.wait_for(stop.wait(), timeout=gap)
-            except asyncio.TimeoutError:
-                pass
-        if played >= cap > 0:
-            log.debug("talk loop hit the per-reply cap (%d); holding until speech ends.", cap)
-            await stop.wait()
+        gid = self._talk_gesture(emotion)
+        if gid is not None and not stop.is_set():
+            await self._execute(gid, f"talk:{emotion.value}")
+        await stop.wait()
 
-    def _talk_palette(self, emotion: Emotion) -> list[int]:
+    def _talk_gesture(self, emotion: Emotion) -> int | None:
         if settings.TALK_GESTURE_IDS:
-            return settings.TALK_GESTURE_IDS
-        return TALK_PALETTE.get(emotion, _CALM)
+            return settings.TALK_GESTURE_IDS[0]
+        return TALK_GESTURE_FOR_EMOTION.get(emotion, _DEFAULT_TALK_GESTURE)
 
     async def relax(self) -> None:
         await self._execute(RELEASE, "relax")

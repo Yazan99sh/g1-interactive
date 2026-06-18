@@ -1,8 +1,9 @@
 """Friendly arm-gesture catalog + read/write of the talking/wake gesture settings.
 
-Lets the control panel show a checkbox picker (named gestures) instead of making the
-operator type raw action ids. Writes the choices to TALK_GESTURE_IDS / WAKE_GESTURE_ID
-in .env (the running pipeline picks them up on the next restart).
+Lets the control panel show named-gesture dropdowns instead of making the operator
+type raw action ids: one move performed when the robot starts talking, and the wake /
+meet-and-greet wave. Writes the choices to TALK_GESTURE_IDS / WAKE_GESTURE_ID in .env
+(the running pipeline picks them up on the next restart).
 """
 from __future__ import annotations
 

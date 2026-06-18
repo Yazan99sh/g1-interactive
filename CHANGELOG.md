@@ -2,6 +2,41 @@
 
 All notable changes to the G1 Interactive Voice Pipeline.
 
+## [0.2.1] — 2026-06-18 — One-move gesture, richer head LED, chunked speech
+
+Refinements after on-robot feedback.
+
+### Changed — talking gesture is now ONE move
+- The robot does a **single** arm move the moment it starts talking, then holds it,
+  instead of cycling gestures the whole time ("one move is enough").
+  `ArmController.talk()` performs one gesture then waits for speech to end.
+- Removed the loop-only knobs `TALK_GESTURE_GAP_MS` / `TALK_GESTURE_MAX_PER_REPLY`
+  (silently ignored if still present in an old `.env`). The move is `TALK_GESTURE_IDS`
+  (first id; default **23** right-hand-up); wake/meet-and-greet stays `WAKE_GESTURE_ID`
+  (**25**, wave with the right hand up near the head).
+
+### Added — richer head-LED state indicator (`robot/led.py`)
+- Distinct, easy-to-read colours per state: **standby** calm blue (idle/normal, matches
+  the head's default glow), **listening** green, **thinking** amber, **speaking**
+  magenta, plus a red **error** blink when a turn fails.
+- *Thinking* **breathes** (smoothly pulses) so "busy" is obvious; configurable via
+  `LED_PULSE_STATES` / `LED_PULSE_PERIOD_MS`. Solid states cost one RPC then idle (no
+  spam); pulsing defaults to thinking only (no audio plays then → no RPC contention).
+- A shared `LedIndicator` owned by the controller drives standby/listening/thinking +
+  error; the pipeline drives speaking. All colours editable from the Environment tab.
+
+### Added — chunked speech for faster first audio
+- `TTS_CHUNKING_ENABLED` (default on) + `TTS_CHUNK_MAX_CHARS` (default 180): a long
+  reply is split on sentence/clause boundaries (never mid-word; EN+AR aware,
+  `ai/text_chunk.py`) and synth+played piece by piece, **prefetching the next piece
+  while the current one plays** — first audio starts almost immediately, no gaps.
+- Applies to the non-streaming path and to over-long streamed sentences.
+
+### Added — control-panel tabs
+- New **Speech** tab: toggle streaming + chunking and set the piece size.
+- **Gestures** tab now uses single dropdowns (talking move + wake wave) instead of
+  the multi-checkbox picker.
+
 ## [0.2.0] — 2026-06-17 — Continuous gestures, control panel, new-host setup 🚧
 
 Second iteration after moving to a new host PC. Focus: the robot now **moves the

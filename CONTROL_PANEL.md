@@ -15,7 +15,9 @@ whether it runs as a **systemd service** or as a **panel-managed subprocess**
 | **Conversation** | Live transcript (what the visitor said / what the robot said, with language + emotion), estimated cost with an editable price table |
 | **Knowledge** | Browse/edit/create/delete the `knowledge/*.md` FAQ + facts |
 | **Instructions** | Edit the robot's persona / system prompt (`prompts/persona.md`) |
-| **Environment** | Edit `.env` — API keys (masked), **ElevenLabs voice id**, and every tunable, grouped by section |
+| **Gestures** | Pick the one arm move the robot makes when it starts talking, and the wake / meet-and-greet wave — named-gesture dropdowns (no raw ids) |
+| **Speech** | Toggle streaming + chunked speech and set the piece size — controls how fast the robot starts talking |
+| **Environment** | Edit `.env` — API keys (masked), **ElevenLabs voice id**, head-LED colours, and every tunable, grouped by section |
 | **Scripts** | Run the diagnostic/action scripts in `tools/` and `scripts/` with live output; upload new `.py` scripts |
 
 Start/Stop/Restart buttons are in the top bar. Settings that need a restart (env,

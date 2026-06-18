@@ -100,6 +100,14 @@ class Settings:
     TTS_STABILITY: float = field(default_factory=lambda: _get_float("TTS_STABILITY", 0.5))
     TTS_SIMILARITY: float = field(default_factory=lambda: _get_float("TTS_SIMILARITY", 0.75))
     TTS_SPEED: float = field(default_factory=lambda: _get_float("TTS_SPEED", 1.0))
+    # Chunked speech: split a long reply into small pieces and synth+play them one by
+    # one (prefetching the next while the current plays) so the robot starts talking
+    # almost immediately instead of waiting for the whole reply to render. The visitor
+    # feels no wait. Toggle it (and the piece size) from the control panel's Speech tab.
+    TTS_CHUNKING_ENABLED: bool = field(default_factory=lambda: _get_bool("TTS_CHUNKING_ENABLED", True))
+    # Target max characters per spoken piece (split on sentence/clause boundaries,
+    # never mid-word). Smaller = faster first audio but more requests.
+    TTS_CHUNK_MAX_CHARS: int = field(default_factory=lambda: _get_int("TTS_CHUNK_MAX_CHARS", 180))
 
     # ---- Audio / VAD ----
     SAMPLE_RATE: int = field(default_factory=lambda: _get_int("SAMPLE_RATE", 16000))
@@ -150,20 +158,14 @@ class Settings:
     # actions are accepted. Leave FALSE for safety: put the robot in Main/Regular
     # mode + standing via the R3 remote yourself; gestures are best-effort.
     ARM_ENTER_FSM: bool = field(default_factory=lambda: _get_bool("ARM_ENTER_FSM", False))
-    # Keep the arms gesturing for the WHOLE time the robot is talking (looped),
-    # instead of one quick wave then freezing. Always-on movement (any emotion).
+    # Do ONE arm move the moment the robot starts talking, then hold it — "one move is
+    # enough" — instead of a continuous loop. Set false for no talking gesture at all.
     TALK_GESTURES_ENABLED: bool = field(default_factory=lambda: _get_bool("TALK_GESTURES_ENABLED", True))
-    # Pause between looped talk gestures (ms). The loop bails out of this pause the
-    # instant speech ends, so it never delays the relax.
-    TALK_GESTURE_GAP_MS: int = field(default_factory=lambda: _get_int("TALK_GESTURE_GAP_MS", 250))
-    # Safety cap: most gestures to play in a single reply (0 = unlimited). Stops a
-    # runaway loop if a reply is extremely long.
-    TALK_GESTURE_MAX_PER_REPLY: int = field(default_factory=lambda: _get_int("TALK_GESTURE_MAX_PER_REPLY", 40))
-    # Arm-action ids cycled while talking. Default = 23 right-hand-up only (one gentle
-    # move). Add more comma-separated to cycle them. Edit here, in .env, or the control
-    # panel's Gestures tab.
+    # The single arm move performed when the robot starts talking (first id wins).
+    # 23 = right-hand-up (one gentle move). Pick it from the panel's Gestures tab.
     TALK_GESTURE_IDS: list[int] = field(default_factory=lambda: _get_int_list("TALK_GESTURE_IDS", "23"))
-    # Arm action played on wake ("Aha!" greeting). 25 = face-level wave.
+    # Arm action played on wake / meet-and-greet ("Aha!"). 25 = wave with the right
+    # hand up near the head.
     WAKE_GESTURE_ID: int = field(default_factory=lambda: _get_int("WAKE_GESTURE_ID", 25))
     # Robot onboard mic (experimental, U6-unverified) — raw PCM UDP multicast.
     ROBOT_MIC_GROUP: str = field(default_factory=lambda: _get("ROBOT_MIC_GROUP", "239.168.123.161"))
@@ -174,12 +176,23 @@ class Settings:
     ROBOT_MIC_IFACE_IP: str = field(default_factory=lambda: _get("ROBOT_MIC_IFACE_IP", ""))
 
     # ---- Head LED (state indicator) ----
-    # Colour the G1 head LED by pipeline state. Each is "R,G,B" (0-255).
+    # Colour the G1 head LED by pipeline state so you can read the robot's state from
+    # across the room. Each is "R,G,B" (0-255). The G1 head glows blue by default, so
+    # standby stays blue (the "normal/idle" colour) while each active state gets a
+    # clearly different colour. Edit any of these from the panel's Environment tab.
     HEAD_LED_ENABLED: bool = field(default_factory=lambda: _get_bool("HEAD_LED_ENABLED", True))
-    LED_STANDBY: list[int] = field(default_factory=lambda: _get_int_list("LED_STANDBY", "0,0,0"))
-    LED_LISTENING: list[int] = field(default_factory=lambda: _get_int_list("LED_LISTENING", "0,0,255"))
-    LED_THINKING: list[int] = field(default_factory=lambda: _get_int_list("LED_THINKING", "255,140,0"))
-    LED_SPEAKING: list[int] = field(default_factory=lambda: _get_int_list("LED_SPEAKING", "0,200,0"))
+    LED_STANDBY: list[int] = field(default_factory=lambda: _get_int_list("LED_STANDBY", "0,0,90"))        # calm blue (idle)
+    LED_LISTENING: list[int] = field(default_factory=lambda: _get_int_list("LED_LISTENING", "0,220,60"))  # green (your turn)
+    LED_THINKING: list[int] = field(default_factory=lambda: _get_int_list("LED_THINKING", "255,120,0"))   # amber (working)
+    LED_SPEAKING: list[int] = field(default_factory=lambda: _get_int_list("LED_SPEAKING", "180,0,220"))   # magenta (talking)
+    LED_ERROR: list[int] = field(default_factory=lambda: _get_int_list("LED_ERROR", "255,0,0"))           # red (a turn failed)
+    # States that "breathe" (smoothly pulse) instead of showing a solid colour — a
+    # clear sign the robot is busy. Comma-separated: standby/listening/thinking/speaking.
+    # Default = thinking only (no audio plays then, so the extra LED RPCs never contend).
+    LED_PULSE_STATES: list[str] = field(
+        default_factory=lambda: [s.lower() for s in _get_list("LED_PULSE_STATES", "thinking")]
+    )
+    LED_PULSE_PERIOD_MS: int = field(default_factory=lambda: _get_int("LED_PULSE_PERIOD_MS", 1600))
 
     # ---- Knowledge base ----
     KB_STRICT: bool = field(default_factory=lambda: _get_bool("KB_STRICT", False))
@@ -208,6 +221,7 @@ class Settings:
             "OPENAI_STT_MODEL": self.OPENAI_STT_MODEL,
             "ELEVENLABS_MODEL": self.ELEVENLABS_MODEL,
             "TTS_OUTPUT_FORMAT": self.TTS_OUTPUT_FORMAT,
+            "TTS_CHUNKING_ENABLED": self.TTS_CHUNKING_ENABLED,
             "SAMPLE_RATE": self.SAMPLE_RATE,
             "MIC_SOURCE": self.MIC_SOURCE,
             "AUDIO_SINK": self.AUDIO_SINK,

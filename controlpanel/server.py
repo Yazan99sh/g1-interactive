@@ -15,7 +15,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from . import cost, env_file, gestures, logtail, paths
+from . import cost, env_file, gestures, logtail, paths, speech
 from .process_manager import ProcessManager
 from .scripts import ScriptRunner, list_scripts, save_upload
 
@@ -239,6 +239,22 @@ async def get_gestures() -> dict:
 async def set_gestures(payload: dict = Body(...)) -> dict:
     gestures.set_config(payload.get("talk_ids"), payload.get("wake_id"))
     return {"ok": True, "restart_required": True}
+
+
+# ---- speech (streaming + chunking latency toggles) ----
+@app.get("/api/speech")
+async def get_speech() -> dict:
+    return speech.get_config()
+
+
+@app.post("/api/speech")
+async def set_speech(payload: dict = Body(...)) -> dict:
+    changed = speech.set_config(
+        streaming=payload.get("streaming"),
+        chunking=payload.get("chunking"),
+        chunk_max_chars=payload.get("chunk_max_chars"),
+    )
+    return {"ok": True, "restart_required": bool(changed)}
 
 
 # ---- scripts ----

@@ -149,13 +149,29 @@ tabInit.knowledge = loadKbList;
 tabInit.instructions = async () => { $("personaContent").value = (await api("/api/persona")).content; };
 
 // ---- gestures ----
+function gestureOptions(catalog, selectedId) {
+  let html = catalog.map((c) =>
+    `<option value="${c.id}" ${c.id === selectedId ? "selected" : ""}>${c.name} (#${c.id})</option>`).join("");
+  // Preserve a custom id (set via the Environment tab) that isn't in the catalog,
+  // so saving the Gestures tab doesn't silently clobber it with the first option.
+  if (selectedId != null && !catalog.some((c) => c.id === selectedId)) {
+    html = `<option value="${selectedId}" selected>Custom (#${selectedId})</option>` + html;
+  }
+  return html;
+}
 tabInit.gestures = async () => {
   const g = await api("/api/gestures");
-  const talk = new Set(g.talk_ids);
-  $("talkGestures").innerHTML = g.catalog.map((c) =>
-    `<label class="gesture-item"><input type="checkbox" data-gid="${c.id}" ${talk.has(c.id) ? "checked" : ""}> ${c.name} <span class="muted">#${c.id}</span></label>`).join("");
-  $("wakeGesture").innerHTML = g.catalog.map((c) =>
-    `<option value="${c.id}" ${c.id === g.wake_id ? "selected" : ""}>${c.name} (#${c.id})</option>`).join("");
+  const talkId = (g.talk_ids && g.talk_ids.length) ? g.talk_ids[0] : null;
+  $("talkGesture").innerHTML = gestureOptions(g.catalog, talkId);
+  $("wakeGesture").innerHTML = gestureOptions(g.catalog, g.wake_id);
+};
+
+// ---- speech (latency toggles) ----
+tabInit.speech = async () => {
+  const s = await api("/api/speech");
+  $("spStreaming").checked = !!s.streaming;
+  $("spChunking").checked = !!s.chunking;
+  $("spChunkChars").value = s.chunk_max_chars;
 };
 
 // ---- environment ----
@@ -262,9 +278,19 @@ function wire() {
   };
 
   $("btnGesturesSave").onclick = async () => {
-    const talk_ids = [...document.querySelectorAll('#talkGestures input[data-gid]:checked')].map((i) => parseInt(i.dataset.gid, 10));
+    const talk_ids = [parseInt($("talkGesture").value, 10)];
     const wake_id = parseInt($("wakeGesture").value, 10);
     try { const r = await api("/api/gestures", { method: "POST", body: { talk_ids, wake_id } }); toast("Gestures saved"); if (r.restart_required) showRestart(); }
+    catch (e) { toast("Save failed: " + e.message, true); }
+  };
+
+  $("btnSpeechSave").onclick = async () => {
+    const body = {
+      streaming: $("spStreaming").checked,
+      chunking: $("spChunking").checked,
+      chunk_max_chars: parseInt($("spChunkChars").value, 10),
+    };
+    try { const r = await api("/api/speech", { method: "POST", body }); toast("Speech settings saved"); if (r.restart_required) showRestart(); }
     catch (e) { toast("Save failed: " + e.message, true); }
   };
 
