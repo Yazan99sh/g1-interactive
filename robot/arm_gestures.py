@@ -97,7 +97,8 @@ class G1ArmGestures(ArmController):
 
     # ---- ArmController ----
     async def greet(self) -> None:
-        await self._execute(HIGH_WAVE, "greet")
+        # Wake acknowledgement wave — use the gentle face-level wave (not the high one).
+        await self._execute(FACE_WAVE, "greet")
 
     async def express(self, emotion: Emotion) -> None:
         action = GESTURE_FOR_EMOTION.get(emotion)
