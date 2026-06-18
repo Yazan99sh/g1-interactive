@@ -36,6 +36,7 @@
       <button class="navItem" data-tab="conversation">💬 Conversation</button>
       <button class="navItem" data-tab="knowledge">📚 Knowledge</button>
       <button class="navItem" data-tab="instructions">🧠 Instructions</button>
+      <button class="navItem" data-tab="gestures">🤖 Gestures</button>
       <button class="navItem" data-tab="environment">🔑 Environment</button>
       <button class="navItem" data-tab="scripts">⚙️ Scripts</button>
     </nav>
@@ -106,6 +107,21 @@
         <h2>Instructions <span class="muted">the robot's persona / system prompt</span></h2>
         <textarea id="personaContent" class="bigtext" spellcheck="false"></textarea>
         <button id="btnPersonaSave" class="btn">Save instructions</button>
+      </section>
+
+      <!-- Gestures -->
+      <section class="tab" id="tab-gestures">
+        <h2>Gestures <span class="muted">arm moves while talking + on wake</span></h2>
+        <div class="card">
+          <div class="card-label">While speaking (cycled in order)</div>
+          <div id="talkGestures" class="gesture-grid"></div>
+        </div>
+        <div class="card">
+          <div class="card-label">Wake greeting ("Aha!")</div>
+          <select id="wakeGesture"></select>
+        </div>
+        <button id="btnGesturesSave" class="btn">Save gestures</button>
+        <p class="muted">Confirm ids on your robot with <code>tools/g1_list_actions.py</code>. Takes effect on restart.</p>
       </section>
 
       <!-- Environment -->

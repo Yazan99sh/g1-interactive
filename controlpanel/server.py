@@ -15,7 +15,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from . import cost, env_file, logtail, paths
+from . import cost, env_file, gestures, logtail, paths
 from .process_manager import ProcessManager
 from .scripts import ScriptRunner, list_scripts, save_upload
 
@@ -226,6 +226,18 @@ async def persona_get() -> dict:
 async def persona_put(payload: dict = Body(...)) -> dict:
     paths.PROMPTS_DIR.mkdir(parents=True, exist_ok=True)
     paths.PERSONA_FILE.write_text(payload.get("content", ""), encoding="utf-8")
+    return {"ok": True, "restart_required": True}
+
+
+# ---- gestures (friendly picker over TALK_GESTURE_IDS / WAKE_GESTURE_ID) ----
+@app.get("/api/gestures")
+async def get_gestures() -> dict:
+    return gestures.get_config()
+
+
+@app.post("/api/gestures")
+async def set_gestures(payload: dict = Body(...)) -> dict:
+    gestures.set_config(payload.get("talk_ids"), payload.get("wake_id"))
     return {"ok": True, "restart_required": True}
 
 

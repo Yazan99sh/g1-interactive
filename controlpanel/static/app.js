@@ -148,6 +148,16 @@ tabInit.knowledge = loadKbList;
 // ---- instructions ----
 tabInit.instructions = async () => { $("personaContent").value = (await api("/api/persona")).content; };
 
+// ---- gestures ----
+tabInit.gestures = async () => {
+  const g = await api("/api/gestures");
+  const talk = new Set(g.talk_ids);
+  $("talkGestures").innerHTML = g.catalog.map((c) =>
+    `<label class="gesture-item"><input type="checkbox" data-gid="${c.id}" ${talk.has(c.id) ? "checked" : ""}> ${c.name} <span class="muted">#${c.id}</span></label>`).join("");
+  $("wakeGesture").innerHTML = g.catalog.map((c) =>
+    `<option value="${c.id}" ${c.id === g.wake_id ? "selected" : ""}>${c.name} (#${c.id})</option>`).join("");
+};
+
 // ---- environment ----
 const VOICE_KEYS = ["ELEVENLABS_VOICE_ID", "ELEVENLABS_ARABIC_VOICE_ID"];
 tabInit.environment = async () => {
@@ -248,6 +258,13 @@ function wire() {
 
   $("btnPersonaSave").onclick = async () => {
     try { const r = await api("/api/persona", { method: "PUT", body: { content: $("personaContent").value } }); toast("Instructions saved"); if (r.restart_required) showRestart(); }
+    catch (e) { toast("Save failed: " + e.message, true); }
+  };
+
+  $("btnGesturesSave").onclick = async () => {
+    const talk_ids = [...document.querySelectorAll('#talkGestures input[data-gid]:checked')].map((i) => parseInt(i.dataset.gid, 10));
+    const wake_id = parseInt($("wakeGesture").value, 10);
+    try { const r = await api("/api/gestures", { method: "POST", body: { talk_ids, wake_id } }); toast("Gestures saved"); if (r.restart_required) showRestart(); }
     catch (e) { toast("Save failed: " + e.message, true); }
   };
 
