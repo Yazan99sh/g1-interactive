@@ -152,9 +152,10 @@ class Settings:
     # Safety cap: most gestures to play in a single reply (0 = unlimited). Stops a
     # runaway loop if a reply is extremely long.
     TALK_GESTURE_MAX_PER_REPLY: int = field(default_factory=lambda: _get_int("TALK_GESTURE_MAX_PER_REPLY", 40))
-    # Optional override for which arm-action ids to cycle while talking (e.g.
-    # "25,26,27"). Empty => use the built-in per-emotion palette in arm_gestures.py.
-    TALK_GESTURE_IDS: list[int] = field(default_factory=lambda: _get_int_list("TALK_GESTURE_IDS", ""))
+    # Arm-action ids cycled while talking. Default = 25 face-wave, 23 right-hand-up,
+    # 33 right-hand-on-heart (gentle, conversational; no high-wave/handshake). Set in
+    # .env to change; clear to "" only in code to fall back to the per-emotion palette.
+    TALK_GESTURE_IDS: list[int] = field(default_factory=lambda: _get_int_list("TALK_GESTURE_IDS", "25,23,33"))
     # Robot onboard mic (experimental, U6-unverified) — raw PCM UDP multicast.
     ROBOT_MIC_GROUP: str = field(default_factory=lambda: _get("ROBOT_MIC_GROUP", "239.168.123.161"))
     ROBOT_MIC_PORT: int = field(default_factory=lambda: _get_int("ROBOT_MIC_PORT", 5555))
