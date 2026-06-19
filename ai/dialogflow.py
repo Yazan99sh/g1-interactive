@@ -20,6 +20,7 @@ Design notes:
 from __future__ import annotations
 
 import asyncio
+import os
 import uuid
 from typing import Optional
 
@@ -75,7 +76,8 @@ class DialogflowClient:
             creds = None
             if settings.DIALOGFLOW_KEY_PATH:
                 from google.oauth2 import service_account
-                creds = service_account.Credentials.from_service_account_file(settings.DIALOGFLOW_KEY_PATH)
+                creds = service_account.Credentials.from_service_account_file(
+                    os.path.expanduser(settings.DIALOGFLOW_KEY_PATH))
             self._cx = cx
             self._client = cx.SessionsClient(
                 client_options={"api_endpoint": self._endpoint}, credentials=creds

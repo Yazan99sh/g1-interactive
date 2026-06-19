@@ -7,6 +7,8 @@ and applied on the next pipeline restart.
 """
 from __future__ import annotations
 
+import os
+
 from . import env_file, paths
 
 _TRUE = ("1", "true", "yes", "on")
@@ -90,7 +92,8 @@ def test_query(text: str) -> dict:
         creds = None
         if cfg["key_path"]:
             from google.oauth2 import service_account
-            creds = service_account.Credentials.from_service_account_file(cfg["key_path"])
+            creds = service_account.Credentials.from_service_account_file(
+                os.path.expanduser(cfg["key_path"]))
         client = cx.SessionsClient(client_options={"api_endpoint": endpoint}, credentials=creds)
         lang = "ar" if any("؀" <= ch <= "ۿ" for ch in text) else "en"
         session = (f"projects/{project}/locations/{location}/agents/{agent}"
