@@ -19,6 +19,7 @@ import httpx
 from ai.dialogflow import DialogflowClient
 from ai.knowledge_base import KnowledgeBase
 from ai.llm import LLMEngine
+from ai.search import WebSearchClient
 from ai.stt import make_transcriber
 from ai.tts import ElevenLabsTTS
 from app.controller import Controller
@@ -140,8 +141,10 @@ async def amain() -> None:
 
         led = LedIndicator(sink)  # head-LED state indicator (shared by both)
         dialogflow = DialogflowClient()  # optional "first answer"; no-op unless enabled
+        search = WebSearchClient(http)   # optional Brave web search; no-op without key
         pipeline = ConversationPipeline(transcriber, llm, tts, kb, conversation, arm, sink,
-                                        led=led, dialogflow=dialogflow, locomotion=locomotion)
+                                        led=led, dialogflow=dialogflow, locomotion=locomotion,
+                                        search=search)
         controller = Controller(
             mic=mic,
             transcriber=transcriber,

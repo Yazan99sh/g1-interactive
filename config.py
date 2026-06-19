@@ -237,6 +237,16 @@ class Settings:
     MOVE_YAW: float = field(default_factory=lambda: _get_float("MOVE_YAW", 0.4))                # rad/s
     MOVE_DURATION_S: float = field(default_factory=lambda: _get_float("MOVE_DURATION_S", 1.5))  # seconds per command
 
+    # ---- Web search (Brave) ----
+    # When on (and BRAVE_SEARCH_API_KEY is set), the robot searches the web for explicit
+    # "search / look it up" requests and for questions needing current info (news,
+    # weather, prices, recent events). It SAYS it's searching first, in the conversation
+    # language. Off automatically if the key is missing.
+    WEB_SEARCH_ENABLED: bool = field(default_factory=lambda: _get_bool("WEB_SEARCH_ENABLED", True))
+    WEB_SEARCH_COUNT: int = field(default_factory=lambda: _get_int("WEB_SEARCH_COUNT", 5))
+    WEB_SEARCH_ANNOUNCE_EN: str = field(default_factory=lambda: _get("WEB_SEARCH_ANNOUNCE_EN", "Sure, let me look that up online."))
+    WEB_SEARCH_ANNOUNCE_AR: str = field(default_factory=lambda: _get("WEB_SEARCH_ANNOUNCE_AR", "حسنًا، لحظة، خليني أبحث في الإنترنت."))
+
     # ---- Knowledge base ----
     KB_STRICT: bool = field(default_factory=lambda: _get_bool("KB_STRICT", False))
 
@@ -259,6 +269,8 @@ class Settings:
             "OPENROUTER_API_KEY": mask(self.OPENROUTER_API_KEY),
             "ELEVENLABS_API_KEY": mask(self.ELEVENLABS_API_KEY),
             "GROQ_API_KEY": (mask(self.GROQ_API_KEY) if self.STT_BACKEND == "groq" else "—"),
+            "BRAVE_SEARCH_API_KEY": (mask(self.BRAVE_SEARCH_API_KEY) if self.WEB_SEARCH_ENABLED else "—"),
+            "WEB_SEARCH_ENABLED": self.WEB_SEARCH_ENABLED,
             "LLM_BACKEND": self.LLM_BACKEND,
             "STREAMING_ENABLED": self.STREAMING_ENABLED,
             "OPENROUTER_MODEL": self.OPENROUTER_MODEL,

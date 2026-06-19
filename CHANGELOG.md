@@ -2,6 +2,21 @@
 
 All notable changes to the G1 Interactive Voice Pipeline.
 
+## [0.3.1] — 2026-06-19 — Brave web search
+
+### Added — web search with a spoken announcement
+- The robot now uses the **Brave Search** API (`BRAVE_SEARCH_API_KEY`, already in config)
+  to answer from live web results — for explicit "search / look it up / google" requests
+  and for questions needing current info (latest, news, weather, prices, recent events;
+  English + Arabic). New `ai/search.py` (Brave client + bilingual intent detector + result
+  formatter), wired into `handle_audio` so it works on both the streaming and one-shot paths.
+- **It says it's searching first**, in the conversation's language (`WEB_SEARCH_ANNOUNCE_EN/AR`),
+  and the Brave fetch overlaps that announcement to hide latency. Then it answers from the
+  results (briefly, mentions it's from the web, no URLs read aloud). Toggle with
+  `WEB_SEARCH_ENABLED`; auto-off if the key is missing. **Live-verified EN + AR.**
+- `DIALOGFLOW_KEY_PATH` now expands `~`; `HostMic` auto-falls-back to an input-capable
+  device when the default has none.
+
 ## [0.3.0] — 2026-06-19 — Dialogflow CX, movement commands, gesture relax, faster STT
 
 ### Fixed — chunked speech no longer overlaps itself on the robot

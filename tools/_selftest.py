@@ -131,5 +131,14 @@ check("df noop ensure", _df._ensure() is False)
 _s1 = _df._session_id; _df.new_session()
 check("df session rotates", _df._session_id != _s1)
 
+# 14. web-search intent detection (EN + AR triggers, no over-fire on normal Q&A)
+from ai.search import search_query  # noqa: E402
+check("ws en explicit", search_query("search for the latest news") is not None)
+check("ws en fresh", search_query("what's the weather today") is not None)
+check("ws ar explicit", search_query("ابحث عن آخر الأخبار") is not None)
+check("ws no-fire kb", search_query("what is the national infrastructure fund") is None)
+check("ws no-fire greet", search_query("hello how are you") is None)
+check("ws no-fire ar", search_query("ما هو صندوق البنية التحتية الوطني") is None)
+
 print("\nALL PASS" if ok else "\nSOME FAILED")
 sys.exit(0 if ok else 1)

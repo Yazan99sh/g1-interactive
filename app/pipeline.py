@@ -16,6 +16,7 @@ from typing import Optional
 from ai.dialogflow import DialogflowClient
 from ai.knowledge_base import KnowledgeBase
 from ai.llm import LLMEngine
+from ai.search import WebSearchClient, search_query, to_context
 from ai.stt import OpenAITranscriber
 from ai.text_chunk import split_for_tts
 from ai.tts import ElevenLabsTTS
@@ -82,6 +83,7 @@ class ConversationPipeline:
         led: Optional[LedIndicator] = None,
         dialogflow: Optional[DialogflowClient] = None,
         locomotion=None,
+        search: Optional[WebSearchClient] = None,
     ) -> None:
         self.transcriber = transcriber
         self.llm = llm
@@ -96,6 +98,8 @@ class ConversationPipeline:
         self.dialogflow = dialogflow
         # Optional experimental voice-driven locomotion (no-op unless enabled + on robot).
         self.locomotion = locomotion or NullLocomotion()
+        # Optional Brave web search (None = never search).
+        self.search = search
 
     # ---- listening result -> spoken reply ---------------------------------
     async def handle_audio(self, pcm: bytes, sample_rate: int) -> TurnOutcome:
@@ -123,6 +127,27 @@ class ConversationPipeline:
                 lang = transcription.language or self.conversation.language
                 ack = await self._do_movement(mv, lang)
                 return TurnOutcome(had_speech=True, user_text=transcription.text, reply_text=ack)
+
+        # Web search: if the visitor asks to search or needs current info, announce it
+        # and answer from live web results instead of the model's own knowledge.
+        if self.search and self.search.enabled:
+            try:
+                reply = await self._maybe_web_search(transcription)
+            except Exception:
+                log_exception(log, "Web search turn failed")
+                reply = None
+            if reply is not None:
+                await self.respond(reply)
+                ms_total = (time.monotonic() - t0) * 1000
+                log.info("Turn done (web search) in %.0f ms", ms_total)
+                record_event(
+                    settings.LOG_DIR, user=transcription.text, reply=reply.text,
+                    lang=reply.language.value, emotion=(reply.emotion or Emotion.NEUTRAL).value,
+                    from_kb=False, ms_total=int(ms_total),
+                    stt_audio_s=round(len(pcm) / (sample_rate * 2), 2) if sample_rate else 0.0,
+                    user_chars=len(transcription.text), reply_chars=len(reply.text),
+                )
+                return TurnOutcome(had_speech=True, user_text=transcription.text, reply_text=reply.text)
 
         try:
             if settings.STREAMING_ENABLED:
@@ -165,6 +190,49 @@ class ConversationPipeline:
         finally:
             await self.locomotion.stop()
         return ack
+
+    # ---- web search (optional, announced) ---------------------------------
+    async def _maybe_web_search(self, transcription: Transcription) -> Optional[Reply]:
+        """If the utterance asks for a search or needs current info, ANNOUNCE that we're
+        searching (in the conversation language), fetch live web results, and answer from
+        them. Returns the Reply (caller speaks it), or None to fall through to the
+        normal Dialogflow/KB/LLM path."""
+        query = search_query(transcription.text)
+        if not query:
+            return None
+        if transcription.language:
+            self.conversation.set_language(transcription.language)
+        lang = self.conversation.language
+        self.conversation.add_user(transcription.text)
+        # Say we're searching, in the visitor's language, while the request is in flight.
+        announce = (settings.WEB_SEARCH_ANNOUNCE_AR if lang is Language.ARABIC
+                    else settings.WEB_SEARCH_ANNOUNCE_EN)
+        self.led.set_state("thinking")
+        # Fetch while we speak the announcement, so the search overlaps the TTS.
+        search_task = asyncio.create_task(self.search.search(query, lang))
+        await self.say(announce, lang, emotion=Emotion.THOUGHTFUL, gesture=False)
+        try:
+            results = await search_task
+        except Exception:
+            log_exception(log, "Brave search task failed")
+            results = []
+        if results:
+            kb_context = to_context(query, results) + (
+                "\n\nUse the WEB SEARCH RESULTS above to answer — they are current. Answer "
+                "briefly and naturally for speech, say you found it online, and never read "
+                "out URLs.")
+        else:
+            kb_context = ("(The web search returned no results — tell the visitor briefly "
+                          "that you couldn't find anything online about that.)")
+        messages = self.conversation.build_messages(transcription.text, kb_context)
+        raw = await self.llm.complete(messages)
+        if not raw.strip():
+            raw = _FALLBACK[lang]
+        emotion, clean = parse_emotion(raw)
+        self.conversation.add_assistant(clean)
+        log.info("Reply [%s/web] (%d results): %s", lang.value, len(results), clean[:80])
+        return Reply(text=clean, emotion=emotion or Emotion.NEUTRAL, language=lang,
+                     meta={"source": "web", "query": query})
 
     # ---- dialogflow (optional first answer) -------------------------------
     async def _dialogflow_reply(self, text: str, lang: Language) -> Optional[Reply]:
