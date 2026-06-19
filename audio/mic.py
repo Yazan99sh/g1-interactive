@@ -54,12 +54,41 @@ class HostMic(MicSource):
         self._stream = None
         self._silence = bytes(int(sample_rate * CHUNK_MS / 1000) * 2)  # one chunk of int16 silence
 
+    @staticmethod
+    def _resolve_input_device(sd, device):
+        """Return a device that actually has an input channel. On many laptops the
+        DEFAULT device PortAudio picks is not a capture device (0 input channels), so
+        opening a mono stream fails with 'Invalid number of channels'. In that case
+        fall back to the first input-capable device so the robot can still hear."""
+        def n_in(dev) -> int:
+            try:
+                info = sd.query_devices(dev, "input") if dev is not None else sd.query_devices(kind="input")
+                return int(info.get("max_input_channels", 0))
+            except Exception:
+                return 0
+
+        if n_in(device) >= 1:
+            return device
+        try:
+            for idx, d in enumerate(sd.query_devices()):
+                if int(d.get("max_input_channels", 0)) >= 1:
+                    log.warning("Input device %r has no input channels; using '%s' (index %d). "
+                                "Set MIC_DEVICE to choose a specific mic.", device, d["name"], idx)
+                    return idx
+        except Exception:
+            pass
+        log.error("No audio input device with input channels found — plug in a mic or set MIC_DEVICE.")
+        return device
+
     async def open(self) -> None:
         import sounddevice as sd  # lazy import
 
         device = self.device
         if device is not None and str(device).isdigit():
             device = int(device)
+
+        # Pick a device that can actually capture (the default may have 0 input chans).
+        device = self._resolve_input_device(sd, device)
 
         # Many mics only support 44.1/48 kHz, not 16 kHz. Capture at a rate the
         # device actually supports, then resample to SAMPLE_RATE in read_chunk.
@@ -91,7 +120,7 @@ class HostMic(MicSource):
         )
         self._stream.start()
         log.info("Host mic open: capture %d Hz -> %d Hz, %d-frame blocks, device=%s",
-                 rate, self.sample_rate, self.blocksize, self.device or "default")
+                 rate, self.sample_rate, self.blocksize, device if device is not None else "default")
 
     async def read_chunk(self) -> bytes:
         # Bounded get so the executor thread wakes periodically — lets the loop
