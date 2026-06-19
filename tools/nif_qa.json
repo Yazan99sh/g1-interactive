@@ -1,0 +1,305 @@
+{
+  "_comment": "National Infrastructure Fund (NIF / 'Infra', under Saudi Arabia's National Development Fund / NDF) Q&A for the G1 robot. Each entry becomes one Dialogflow CX intent + one route on the Default Start Flow's Start Page, with English (en) and Arabic (ar) training phrases + responses. The two factual blocks (ask.what_is_nif, ask.operational_milestones) are the user-provided answer text kept VERBATIM, with a faithful translation into the other language. Push with: python tools/cx_import.py --agent-name Nova-1 --qa tools/nif_qa.json --purge  (auto-discovers the Nova-1 agent + adds the 'ar' language). Responses are spoken aloud via TTS.",
+  "intents": [
+    {
+      "id": "ask.what_is_nif",
+      "training_phrases": {
+        "en": [
+          "What is the National Infrastructure Fund and what are its objectives?",
+          "What is the National Infrastructure Fund?",
+          "Tell me about the National Infrastructure Fund.",
+          "What are the objectives of the National Infrastructure Fund?",
+          "What does the National Infrastructure Fund aim to do?",
+          "When was the National Infrastructure Fund established?",
+          "Who established the National Infrastructure Fund?",
+          "What is the purpose of the National Infrastructure Fund?",
+          "Explain the National Infrastructure Fund to me.",
+          "Why was the National Infrastructure Fund created?",
+          "What financing solutions does the National Infrastructure Fund provide?",
+          "How does the National Infrastructure Fund support infrastructure projects?",
+          "What role does the National Infrastructure Fund play in the Kingdom?",
+          "Give me an overview of the National Infrastructure Fund.",
+          "What is the National Infrastructure Fund and its goals?",
+          "What is Infra and what is it for?",
+          "How does the fund increase private sector participation?",
+          "Tell me about the goals of the Infra fund.",
+          "What is the infrastructure fund under the National Development Fund?",
+          "What is NIF?"
+        ],
+        "ar": [
+          "ما هو صندوق البنية التحتية الوطني وما أهدافه؟",
+          "شو هو صندوق البنية التحتية الوطني؟",
+          "حدثني عن صندوق البنية التحتية الوطني.",
+          "ما أهداف صندوق البنية التحتية الوطني؟",
+          "إيش يهدف له صندوق البنية التحتية الوطني؟",
+          "متى تأسس صندوق البنية التحتية الوطني؟",
+          "مين أسس صندوق البنية التحتية الوطني؟",
+          "شو الهدف من صندوق البنية التحتية الوطني؟",
+          "اشرح لي صندوق البنية التحتية الوطني.",
+          "ليش تم إنشاء صندوق البنية التحتية الوطني؟",
+          "شو حلول التمويل اللي يقدمها صندوق البنية التحتية الوطني؟",
+          "كيف يدعم صندوق البنية التحتية الوطني مشاريع البنية التحتية؟",
+          "شو دور صندوق البنية التحتية الوطني في المملكة؟",
+          "عطني نبذة عن صندوق البنية التحتية الوطني.",
+          "ما المقصود بصندوق البنية التحتية الوطني؟",
+          "كيف يزيد الصندوق مشاركة القطاع الخاص؟",
+          "ما هو صندوق البنية التحتية وأهدافه؟",
+          "صندوق البنية التحتية الوطني، شو قصته وشو أهدافه؟"
+        ]
+      },
+      "responses": {
+        "en": "On the nineteenth of Rabi al-Awwal 1443 AH, corresponding to the fifth of October 2021, the National Development Fund (NDF) announced the establishment of the National Infrastructure Fund, which was approved by the Council of Ministers as one of the NDF's development funds and banks in February 2024. The National Infrastructure Fund aims to provide innovative and flexible financing solutions that play a role in raising and accelerating the development of infrastructure projects in the Kingdom and increasing private-sector participation at both the national and international levels.",
+        "ar": "في التاسع عشر من ربيع الأول سنة ألف وأربعمئة وثلاثة وأربعين هجرية، الموافق الخامس من أكتوبر سنة ألفين وواحد وعشرين ميلادية، أعلن صندوق التنمية الوطني عن تأسيس صندوق البنية التحتية الوطني، الذي تمت الموافقة عليه من قبل مجلس الوزراء كأحد الصناديق والبنوك التنموية التابعة له في فبراير سنة ألفين وأربعة وعشرين. يهدف صندوق البنية التحتية الوطني إلى توفير حلول تمويل مبتكرة ومرنة تلعب دورًا في رفع وتسريع تطوير مشاريع البنية التحتية في المملكة وزيادة مشاركة القطاع الخاص على الصعيدين الوطني والدولي."
+      }
+    },
+    {
+      "id": "ask.operational_milestones",
+      "training_phrases": {
+        "en": [
+          "What operational milestones and functional capabilities has the fund achieved?",
+          "What has the fund achieved so far?",
+          "What milestones has the National Infrastructure Fund reached?",
+          "What are the fund's functional capabilities?",
+          "What has Infra accomplished?",
+          "What operating processes has the fund put in place?",
+          "Tell me about the fund's achievements.",
+          "What progress has the National Infrastructure Fund made?",
+          "What foundational building blocks has the fund completed?",
+          "What has the fund done in investment and lending?",
+          "What vision and mission has the fund concluded?",
+          "What has the fund built in terms of policies and processes?",
+          "What capabilities does the fund have now?",
+          "How far has Infra come operationally?",
+          "What strategic direction and KPIs has the fund defined?",
+          "Summarize the fund's operational progress.",
+          "In which areas has the fund laid the groundwork?",
+          "What did the fund achieve with its strategic partner?",
+          "What functional capabilities does Infra offer?",
+          "What has the fund set up so far?"
+        ],
+        "ar": [
+          "ما هي الإنجازات التشغيلية والقدرات الوظيفية التي حققها الصندوق؟",
+          "شو حقق الصندوق لحد الآن؟",
+          "شو الإنجازات اللي وصل لها صندوق البنية التحتية الوطني؟",
+          "شو القدرات الوظيفية للصندوق؟",
+          "شو أنجز صندوق البنية التحتية؟",
+          "شو العمليات التشغيلية اللي وضعها الصندوق؟",
+          "حدثني عن إنجازات الصندوق.",
+          "شو التقدم اللي حققه صندوق البنية التحتية الوطني؟",
+          "شو اللبنات الأساسية اللي أنجزها الصندوق؟",
+          "شو سوّى الصندوق في مجال الاستثمار والإقراض؟",
+          "شو الرؤية والرسالة اللي توصّل لها الصندوق؟",
+          "شو بنى الصندوق من سياسات وعمليات؟",
+          "شو القدرات اللي صار عند الصندوق الحين؟",
+          "وين وصل صندوق البنية التحتية تشغيليًا؟",
+          "شو المؤشرات والتوجه الاستراتيجي اللي حدده الصندوق؟",
+          "لخّص لي التقدم التشغيلي للصندوق.",
+          "في أي مجالات أرسى الصندوق الأسس؟",
+          "شو حقق الصندوق مع شريكه الاستراتيجي؟"
+        ]
+      },
+      "responses": {
+        "en": "The fund has worked with relevant stakeholders internally and externally including its strategic partner, to conclude a clear vision, mission, strategic direction, and KPIs as well as the majority of operating processes and operating framework. In term of core business, Infra has completed laying the foundational building blocks including policies, processes, and manuals, in most areas including investment and lending, deal sourcing and deal management, financial and enterprise risk in addition to market research and enterprise functions. Below is a summary of the fund functional capabilities.",
+        "ar": "عمل الصندوق مع الجهات المعنية داخليًا وخارجيًا، بما في ذلك شريكه الاستراتيجي، للتوصل إلى رؤية ورسالة وتوجه استراتيجي ومؤشرات أداء رئيسية واضحة، إضافة إلى غالبية العمليات التشغيلية والإطار التشغيلي. وعلى صعيد الأعمال الأساسية، أنجز صندوق البنية التحتية إرساء اللبنات الأساسية، بما في ذلك السياسات والعمليات والأدلة، في معظم المجالات، ومنها الاستثمار والإقراض، وتوريد الصفقات وإدارتها، والمخاطر المالية ومخاطر المؤسسة، إضافة إلى أبحاث السوق والوظائف المؤسسية. وفيما يلي ملخص للقدرات الوظيفية للصندوق."
+      }
+    },
+    {
+      "id": "ask.identity",
+      "training_phrases": {
+        "en": [
+          "What's your name?",
+          "Who are you?",
+          "Are you a robot?",
+          "What should I call you?",
+          "Tell me about yourself.",
+          "Are you a real robot?",
+          "Introduce yourself.",
+          "What kind of robot are you?",
+          "Who made you?",
+          "Do you have a name?"
+        ],
+        "ar": [
+          "شو اسمك؟",
+          "من أنت؟",
+          "هل أنت روبوت؟",
+          "بشو أناديك؟",
+          "عرّف عن نفسك.",
+          "أنت روبوت حقيقي؟",
+          "مين سواك؟",
+          "عندك اسم؟",
+          "شو نوع الروبوت أنت؟",
+          "احكي لي عن نفسك."
+        ]
+      },
+      "responses": {
+        "en": "I'm the interactive robot of the National Infrastructure Fund. I'm here to welcome you and answer your questions about the fund.",
+        "ar": "أنا الروبوت التفاعلي لصندوق البنية التحتية الوطني. أنا هنا لأرحّب بك وأجيب على أسئلتك عن الصندوق."
+      }
+    },
+    {
+      "id": "ask.capabilities",
+      "training_phrases": {
+        "en": [
+          "What can you do?",
+          "How can you help me?",
+          "What can I ask you?",
+          "What topics can you talk about?",
+          "What do you know about?",
+          "Tell me what you can help with.",
+          "What are you able to assist with?",
+          "What can I talk to you about?",
+          "What questions can I ask?",
+          "What are your capabilities?"
+        ],
+        "ar": [
+          "شو تقدر تسوي؟",
+          "كيف ممكن تساعدني؟",
+          "شو أقدر أسألك عنه؟",
+          "شو المواضيع اللي تحكي عنها؟",
+          "شو تعرف؟",
+          "بشو ممكن أحكي معك؟",
+          "شو الأشياء اللي تساعدني فيها؟",
+          "شو قدراتك؟",
+          "إيش ممكن أسألك؟",
+          "قول لي شو تقدر تسوي؟"
+        ]
+      },
+      "responses": {
+        "en": "I can tell you about the National Infrastructure Fund — what it is, its objectives, and the milestones and capabilities it has achieved. What would you like to know?",
+        "ar": "أقدر أعرّفك على صندوق البنية التحتية الوطني — شو هو، وأهدافه، والإنجازات والقدرات اللي حققها. شو تحب تعرف؟"
+      }
+    },
+    {
+      "id": "ask.greeting",
+      "training_phrases": {
+        "en": [
+          "Hi",
+          "Hello",
+          "Good morning",
+          "Hey there",
+          "Good afternoon",
+          "Hello there",
+          "Good evening",
+          "Hi there",
+          "Greetings",
+          "Hey"
+        ],
+        "ar": [
+          "مرحبا",
+          "السلام عليكم",
+          "صباح الخير",
+          "هلا",
+          "مساء الخير",
+          "أهلا",
+          "هاي",
+          "أهلين",
+          "هلا والله",
+          "يا هلا"
+        ]
+      },
+      "responses": {
+        "en": "Welcome! I'm the National Infrastructure Fund's robot. How can I help you today?",
+        "ar": "أهلاً وسهلاً! أنا روبوت صندوق البنية التحتية الوطني. كيف أقدر أساعدك اليوم؟"
+      }
+    },
+    {
+      "id": "ask.thanks",
+      "training_phrases": {
+        "en": [
+          "Thank you",
+          "Thanks",
+          "Thanks a lot",
+          "That was helpful, thanks",
+          "I appreciate it",
+          "Thank you so much",
+          "Many thanks",
+          "Thanks for the information",
+          "Much appreciated",
+          "Thank you for your help"
+        ],
+        "ar": [
+          "شكرًا",
+          "مشكور",
+          "شكرًا جزيلًا",
+          "كان مفيد، شكرًا",
+          "أقدّر مساعدتك",
+          "يعطيك العافية",
+          "ممنون",
+          "شكرًا على المعلومة",
+          "تسلم",
+          "شكرًا لك"
+        ]
+      },
+      "responses": {
+        "en": "You're most welcome. Is there anything else you'd like to know about the National Infrastructure Fund?",
+        "ar": "على الرحب والسعة. في شي ثاني تحب تعرفه عن صندوق البنية التحتية الوطني؟"
+      }
+    },
+    {
+      "id": "ask.goodbye",
+      "training_phrases": {
+        "en": [
+          "Goodbye",
+          "Bye",
+          "See you later",
+          "I have to go",
+          "Bye bye",
+          "See you",
+          "Take care",
+          "I'm leaving now",
+          "Farewell",
+          "Catch you later"
+        ],
+        "ar": [
+          "مع السلامة",
+          "باي",
+          "نشوفك بعدين",
+          "لازم أمشي",
+          "في أمان الله",
+          "إلى اللقاء",
+          "باي باي",
+          "أنا ماشي",
+          "خلاص رايح",
+          "نشوفك"
+        ]
+      },
+      "responses": {
+        "en": "Goodbye, and thank you for visiting the National Infrastructure Fund. I hope to see you again.",
+        "ar": "مع السلامة، وشكرًا لزيارتك صندوق البنية التحتية الوطني. أتمنى أشوفك مرة ثانية."
+      }
+    },
+    {
+      "id": "ask.talk_to_human",
+      "training_phrases": {
+        "en": [
+          "I want to talk to a person",
+          "Can I speak to an employee?",
+          "Connect me with a human",
+          "Is there a staff member I can talk to?",
+          "I'd like to speak with someone from the team",
+          "Can a real person help me?",
+          "I need to speak to a human",
+          "Get me a representative",
+          "Let me talk to one of the staff",
+          "Can I talk to a human instead of the robot?"
+        ],
+        "ar": [
+          "أبغى أحكي مع موظف",
+          "ممكن أتكلم مع أحد الموظفين؟",
+          "وصّلني بشخص حقيقي",
+          "في حد من الفريق أكلمه؟",
+          "أبغى أتكلم مع واحد من الفريق",
+          "ممكن تجيب لي موظف؟",
+          "أحتاج أحكي مع إنسان",
+          "وصّلني بممثل من الفريق",
+          "خلني أكلم أحد الموظفين",
+          "أبغى أكلم إنسان مو روبوت"
+        ]
+      },
+      "responses": {
+        "en": "Of course. One of our colleagues at the National Infrastructure Fund will be glad to assist you. Please allow me to direct you to a staff member.",
+        "ar": "بكل سرور. أحد زملائي في صندوق البنية التحتية الوطني بيسعده مساعدتك. اسمح لي أوجّهك إلى أحد الموظفين."
+      }
+    }
+  ]
+}

@@ -74,6 +74,7 @@ class G1ArmGestures(ArmController):
         self._arm.SetTimeout(10.0)
         self._arm.Init()
         self._loco = None
+        self._last_action_id: int | None = None  # de-dupe back-to-back RELEASE calls
         if settings.ARM_ENTER_FSM:
             self._enter_arm_mode()
         else:
@@ -108,15 +109,29 @@ class G1ArmGestures(ArmController):
         await self._execute(action, f"express:{emotion.value}")
 
     async def talk(self, emotion: Emotion, stop: asyncio.Event) -> None:
-        """Do ONE arm move the moment the robot starts talking, then hold the pose
-        until ``stop`` is set (speech finished) — "one move is enough", no looping.
-        Best-effort — never raises; if disabled it just waits for ``stop``."""
+        """Do ONE arm move the moment the robot starts talking, hold it briefly so it
+        reads as a deliberate gesture, then return to the neutral pose — even if the
+        robot is still speaking. Holding a raised hand for a whole long reply looks
+        odd; a short 1-3 s gesture, then back to rest, looks natural. "One move is
+        enough", no looping. Best-effort — never raises; if disabled it just waits.
+        The caller relaxes again on exit as a safety net."""
         if stop.is_set() or not settings.TALK_GESTURES_ENABLED:
             await stop.wait()
             return
         gid = self._talk_gesture(emotion)
-        if gid is not None and not stop.is_set():
+        if gid is None:
+            await stop.wait()
+            return
+        if not stop.is_set():
             await self._execute(gid, f"talk:{emotion.value}")
+        # Hold 1-3 s (or until speech ends, whichever is first), then relax back to
+        # normal so the robot doesn't freeze mid-gesture through a long reply.
+        hold_s = max(1.0, min(3.0, settings.TALK_GESTURE_HOLD_MS / 1000.0))
+        try:
+            await asyncio.wait_for(stop.wait(), timeout=hold_s)
+        except asyncio.TimeoutError:
+            pass
+        await self.relax()
         await stop.wait()
 
     def _talk_gesture(self, emotion: Emotion) -> int | None:
@@ -125,6 +140,11 @@ class G1ArmGestures(ArmController):
         return TALK_GESTURE_FOR_EMOTION.get(emotion, _DEFAULT_TALK_GESTURE)
 
     async def relax(self) -> None:
+        # Skip a redundant RELEASE if the arm is already released (talk() relaxes after
+        # its hold, then the pipeline's finally calls relax() again as a safety net —
+        # no need to re-issue the same RPC each reply).
+        if self._last_action_id == RELEASE:
+            return
         await self._execute(RELEASE, "relax")
 
     async def close(self) -> None:
@@ -136,6 +156,7 @@ class G1ArmGestures(ArmController):
             await asyncio.get_running_loop().run_in_executor(
                 None, self._arm.ExecuteAction, action_id
             )
+            self._last_action_id = action_id
             log.info("Arm gesture %s (id=%d)", label, action_id)
         except Exception:
             log_exception(log, f"Arm gesture {label} (id={action_id}) failed (non-fatal)")

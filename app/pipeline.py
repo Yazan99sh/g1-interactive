@@ -13,6 +13,7 @@ from collections import deque
 from dataclasses import dataclass
 from typing import Optional
 
+from ai.dialogflow import DialogflowClient
 from ai.knowledge_base import KnowledgeBase
 from ai.llm import LLMEngine
 from ai.stt import OpenAITranscriber
@@ -21,11 +22,13 @@ from ai.tts import ElevenLabsTTS
 from app.conversation import ConversationManager
 from app.logging_setup import get_logger, log_exception
 from app.metrics import record_event
+from app.movement import MovementCommand, parse_movement
 from app.state import Emotion, Language, Reply, Transcription, parse_emotion, _EMOTION_TAG
 from audio.sink import AudioSink
 from config import settings
 from robot.interfaces import ArmController
 from robot.led import LedIndicator
+from robot.locomotion import NullLocomotion
 
 log = get_logger("app.pipeline")
 
@@ -77,6 +80,8 @@ class ConversationPipeline:
         arm: ArmController,
         sink: AudioSink,
         led: Optional[LedIndicator] = None,
+        dialogflow: Optional[DialogflowClient] = None,
+        locomotion=None,
     ) -> None:
         self.transcriber = transcriber
         self.llm = llm
@@ -87,6 +92,10 @@ class ConversationPipeline:
         self.sink = sink
         # Shared with the controller; off-robot/dev defaults to a no-op indicator.
         self.led = led or LedIndicator(None)
+        # Optional Dialogflow CX "first answer" stage (None = always use KB/LLM).
+        self.dialogflow = dialogflow
+        # Optional experimental voice-driven locomotion (no-op unless enabled + on robot).
+        self.locomotion = locomotion or NullLocomotion()
 
     # ---- listening result -> spoken reply ---------------------------------
     async def handle_audio(self, pcm: bytes, sample_rate: int) -> TurnOutcome:
@@ -105,6 +114,15 @@ class ConversationPipeline:
         if transcription.is_blank:
             log.info("Empty transcription — treating as silence.")
             return TurnOutcome(had_speech=False)
+
+        # Experimental: a movement order ("move forward", "وقف"…) is handled here,
+        # before the normal answer path, when enabled and running on the robot.
+        if settings.MOVEMENT_COMMANDS_ENABLED and self.locomotion.enabled:
+            mv = parse_movement(transcription.text)
+            if mv is not None:
+                lang = transcription.language or self.conversation.language
+                ack = await self._do_movement(mv, lang)
+                return TurnOutcome(had_speech=True, user_text=transcription.text, reply_text=ack)
 
         try:
             if settings.STREAMING_ENABLED:
@@ -132,12 +150,47 @@ class ConversationPipeline:
         )
         return TurnOutcome(had_speech=True, user_text=transcription.text, reply_text=reply.text)
 
+    # ---- experimental movement -------------------------------------------
+    async def _do_movement(self, cmd: MovementCommand, language: Language) -> str:
+        """Acknowledge out loud and perform one short, bounded move at the same time."""
+        ack = cmd.ack_ar if language is Language.ARABIC else cmd.ack_en
+        self.led.set_state("speaking")
+        log.info("Movement command: %s (%s)", cmd.kind, language.value)
+        try:
+            await asyncio.gather(
+                self.say(ack, language, emotion=Emotion.PLAYFUL, gesture=False),
+                self.locomotion.execute(cmd),
+                return_exceptions=True,
+            )
+        finally:
+            await self.locomotion.stop()
+        return ack
+
+    # ---- dialogflow (optional first answer) -------------------------------
+    async def _dialogflow_reply(self, text: str, lang: Language) -> Optional[Reply]:
+        """Try Dialogflow CX first. Returns a Reply (and records it in history) on a
+        confident match, or None to fall through to the KB / LLM."""
+        if not (self.dialogflow and self.dialogflow.enabled):
+            return None
+        answer = await self.dialogflow.answer(text, lang)
+        if not answer:
+            return None
+        self.conversation.add_assistant(answer)
+        log.info("Reply [%s/dialogflow]: %s", lang.value, answer[:80])
+        return Reply(text=answer, emotion=Emotion.HAPPY, language=lang,
+                     from_knowledge_base=True, meta={"source": "dialogflow"})
+
     # ---- think ------------------------------------------------------------
     async def think(self, transcription: Transcription) -> Reply:
         if transcription.language:
             self.conversation.set_language(transcription.language)
         lang = self.conversation.language
         self.conversation.add_user(transcription.text)
+
+        # Dialogflow CX first (if enabled) — a confident structured answer skips the LLM.
+        df = await self._dialogflow_reply(transcription.text, lang)
+        if df is not None:
+            return df
 
         # KB-strict: verbatim FAQ answer, skip the LLM.
         if settings.KB_STRICT:
@@ -194,7 +247,8 @@ class ConversationPipeline:
     async def _play_chunked(self, text: str, language: Language) -> None:
         """Synthesize the reply in small pieces and play them back-to-back, prefetching
         the next piece while the current one plays — so first audio starts fast and
-        there's no gap between pieces."""
+        there's no SYNTH wait between pieces (just a small natural beat at the boundary
+        from the speaker's tail-drain, which prevents pieces overlapping)."""
         pieces = split_for_tts(text, settings.TTS_CHUNK_MAX_CHARS)
         if not pieces:
             return
@@ -238,6 +292,12 @@ class ConversationPipeline:
             self.conversation.set_language(transcription.language)
         lang = self.conversation.language
         self.conversation.add_user(transcription.text)
+
+        # Dialogflow CX first — speak a confident structured answer and skip streaming.
+        df = await self._dialogflow_reply(transcription.text, lang)
+        if df is not None:
+            await self.respond(df)
+            return df
 
         # KB-strict verbatim answer — short, no need to stream.
         if settings.KB_STRICT:
@@ -348,8 +408,9 @@ class ConversationPipeline:
             prefetch: Optional[asyncio.Task] = None
             try:
                 # Synth the first piece, then keep synthesising the NEXT piece while the
-                # current one plays — first audio starts fast and there's no gap between
-                # pieces (the prefetch overlaps playback, even on the streaming path).
+                # current one plays — first audio starts fast and there's no SYNTH wait
+                # between pieces (the prefetch overlaps playback, even on the streaming
+                # path; a small tail-drain beat at each boundary prevents overlap).
                 result = await fetch_and_synth()
                 while result is not None:
                     if talk_task is None:  # first real audio: light up + do one move

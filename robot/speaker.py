@@ -45,6 +45,7 @@ class G1Speaker(AudioSink):
         self._stop_flag = False
         self._rpc_lock = threading.Lock()  # AudioClient isn't thread-safe; serialise RPCs
         self._last_led: tuple[int, int, int] | None = None
+        self._tail_drain_s = max(0.0, settings.ROBOT_SPEAKER_TAIL_DRAIN_MS / 1000.0)
         log.info("G1Speaker ready (volume=%d).", settings.ROBOT_SPEAKER_VOLUME)
 
     def set_led(self, r: int, g: int, b: int) -> None:
@@ -90,6 +91,17 @@ class G1Speaker(AudioSink):
         stream_id = str(int(time.time() * 1000))
         # NB: the head LED is now driven by pipeline STATE (set_led), not here, so it
         # can show listening/thinking/speaking — not just on/off during playback.
+        #
+        # We feed each chunk in ~0.9× its real duration so the robot's buffer never
+        # underruns mid-utterance. That means by the end of the loop we've run AHEAD of
+        # real playback by ~0.1× the total — the robot is STILL emitting buffered audio.
+        # For one utterance that's invisible, but in chunked/streaming mode the NEXT
+        # piece's play() would start PlayStream over this still-audible tail → the robot
+        # talks over itself. So we track the lead we built up and drain it (sleep the
+        # remainder + a small transport margin) before returning, so play() only returns
+        # once this piece has actually finished. Barge-in (stop) skips the drain.
+        fed_s = 0.0
+        slept_s = 0.0
         try:
             for off in range(0, len(pcm), CHUNK_MAX):
                 if self._stop_flag:
@@ -97,8 +109,17 @@ class G1Speaker(AudioSink):
                 chunk = pcm[off:off + CHUNK_MAX]
                 with self._rpc_lock:  # lock the RPC, but never hold it across the sleep
                     self._client.PlayStream(APP_NAME, stream_id, chunk)
-                # pace ~chunk duration (0.9× leaves a small underrun margin)
-                time.sleep(len(chunk) / BYTES_PER_S * 0.9)
+                dur = len(chunk) / BYTES_PER_S
+                fed_s += dur
+                nap = dur * 0.9  # 0.9× leaves a small underrun margin within the utterance
+                slept_s += nap
+                time.sleep(nap)
+            # Drain the ~0.1× lead we built up (plus transport margin) so the buffered
+            # tail finishes before we hand back — otherwise the next piece overlaps it.
+            if not self._stop_flag:
+                remaining = fed_s - slept_s + self._tail_drain_s
+                if remaining > 0:
+                    time.sleep(remaining)
         except Exception:
             log_exception(log, "PlayStream failed")
 

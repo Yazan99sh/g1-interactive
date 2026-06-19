@@ -38,6 +38,7 @@
       <button class="navItem" data-tab="instructions">🧠 Instructions</button>
       <button class="navItem" data-tab="gestures">🤖 Gestures</button>
       <button class="navItem" data-tab="speech">⚡ Speech</button>
+      <button class="navItem" data-tab="dialogflow">🟢 Dialogflow</button>
       <button class="navItem" data-tab="environment">🔑 Environment</button>
       <button class="navItem" data-tab="scripts">⚙️ Scripts</button>
     </nav>
@@ -53,6 +54,10 @@
         </div>
         <p class="muted" id="dashSystemd"></p>
         <button id="btnInstallService" class="btn">Install as systemd service</button>
+        <div id="dashErrorWrap" class="hidden">
+          <p class="muted" style="margin-bottom:4px">⚠️ The pipeline isn't running — last output:</p>
+          <pre id="dashError" class="console"></pre>
+        </div>
       </section>
 
       <!-- Console -->
@@ -60,7 +65,7 @@
         <h2>Console <span class="muted">live logs</span></h2>
         <div class="toolbar">
           <label>File
-            <select id="logFile"><option value="g1">g1.log (all)</option><option value="errors">errors.log</option></select>
+            <select id="logFile"><option value="g1">g1.log (all)</option><option value="errors">errors.log</option><option value="pipeline">pipeline (stdout)</option></select>
           </label>
           <label>Level
             <select id="logLevel"><option>DEBUG</option><option>INFO</option><option>WARNING</option><option>ERROR</option></select>
@@ -123,11 +128,30 @@
         </div>
         <button id="btnGesturesSave" class="btn">Save gestures</button>
         <p class="muted">Confirm ids on your robot with <code>tools/g1_list_actions.py</code>. Takes effect on restart.</p>
+
+        <h2 style="margin-top:28px">Movement <span class="muted">experimental — voice-driven walking</span></h2>
+        <div class="card">
+          <label class="toggle"><input type="checkbox" id="mvEnabled"> Allow voice movement commands ("move forward/back/left/right", "turn left/right", "stop")</label>
+          <p class="muted">⚠️ Experimental. The robot must be <b>standing in Main/Regular mode</b> (R1+X) with clear space around it. Moves are short and slow. Works in English and Arabic.</p>
+          <div class="envField"><label for="mvSpeed">Walk speed (m/s, ≤ 0.3)</label><input id="mvSpeed" type="number" min="0.05" max="0.3" step="0.05"></div>
+          <div class="envField"><label for="mvYaw">Turn speed (rad/s, ≤ 0.8)</label><input id="mvYaw" type="number" min="0.1" max="0.8" step="0.1"></div>
+          <div class="envField"><label for="mvDur">Duration per command (s, ≤ 3)</label><input id="mvDur" type="number" min="0.3" max="3" step="0.1"></div>
+          <button id="btnMovementSave" class="btn">Save movement settings</button>
+        </div>
       </section>
 
       <!-- Speech -->
       <section class="tab" id="tab-speech">
         <h2>Speech <span class="muted">how fast the robot starts talking</span></h2>
+        <div class="card">
+          <div class="envField"><label for="spSttBackend">Speech-to-text engine</label>
+            <select id="spSttBackend">
+              <option value="openai">OpenAI gpt-4o-transcribe (default)</option>
+              <option value="groq">Groq Whisper large-v3-turbo (faster, needs GROQ_API_KEY)</option>
+            </select>
+          </div>
+          <p class="muted">Groq's Whisper turbo is much faster and cheaper with strong Arabic + English. Set <code>GROQ_API_KEY</code> in the Environment tab; it falls back to OpenAI if the key is missing.</p>
+        </div>
         <div class="card">
           <label class="toggle"><input type="checkbox" id="spStreaming"> Stream the reply into speech sentence-by-sentence</label>
           <p class="muted">The robot starts talking as soon as the first sentence is ready (lowest perceived latency).</p>
@@ -140,6 +164,32 @@
         </div>
         <button id="btnSpeechSave" class="btn">Save speech settings</button>
         <p class="muted">Takes effect on restart.</p>
+      </section>
+
+      <!-- Dialogflow -->
+      <section class="tab" id="tab-dialogflow">
+        <h2>Dialogflow CX <span class="muted">answer from a Dialogflow agent first, LLM as fallback</span></h2>
+        <div class="card">
+          <label class="toggle"><input type="checkbox" id="dfEnabled"> Use Dialogflow CX as the first answer (fall back to the LLM)</label>
+          <p class="muted">Each turn is sent to the agent first; a confident intent match is spoken verbatim and the LLM is skipped. Anything it doesn't match goes to the LLM.</p>
+        </div>
+        <div class="card">
+          <div class="envField"><label for="dfProject">Project</label><input id="dfProject" type="text"></div>
+          <div class="envField"><label for="dfLocation">Location</label><input id="dfLocation" type="text"></div>
+          <div class="envField"><label for="dfAgent">Agent ID</label><input id="dfAgent" type="text"></div>
+          <div class="envField"><label for="dfKey">Service-account key path</label><input id="dfKey" type="text" placeholder="blank = use GOOGLE_APPLICATION_CREDENTIALS"></div>
+          <div class="envField"><label for="dfConf">Confidence threshold (0–1)</label><input id="dfConf" type="number" min="0" max="1" step="0.05"></div>
+        </div>
+        <button id="btnDfSave" class="btn">Save Dialogflow settings</button>
+        <div class="card">
+          <div class="card-label">Test the agent (live detectIntent)</div>
+          <div class="toolbar">
+            <input id="dfTestQ" type="text" placeholder="e.g. What is the National Infrastructure Fund?" style="flex:1">
+            <button id="btnDfTest" class="btn btn-tiny">Test</button>
+          </div>
+          <pre id="dfTestOut" class="console"></pre>
+        </div>
+        <p class="muted">Takes effect on restart. Import/refresh the agent's Q&amp;A with <code>tools/cx_import.py</code>, verify with <code>tools/cx_test.py</code>.</p>
       </section>
 
       <!-- Environment -->

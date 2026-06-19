@@ -2,6 +2,69 @@
 
 All notable changes to the G1 Interactive Voice Pipeline.
 
+## [0.3.0] — 2026-06-19 — Dialogflow CX, movement commands, gesture relax, faster STT
+
+### Fixed — chunked speech no longer overlaps itself on the robot
+- `robot/speaker.py` fed each chunk at 0.9× its real duration, so `play()` returned
+  ~0.1× early while the robot was still emitting buffered audio. In single-shot mode
+  that was invisible, but in **chunked/streaming** mode the next piece started over the
+  previous piece's tail → the robot talked over itself. Now it drains the built-up lead
+  (+ a small transport margin) before returning, so pieces play back-to-back cleanly.
+
+### Changed — talking gesture returns to rest after 1–3 s
+- The robot does its one move when it starts talking, **holds ~`TALK_GESTURE_HOLD_MS`
+  (default 2000 ms, clamped 1000–3000), then relaxes to neutral even if still speaking**
+  — holding a raised hand through a long reply looked odd. Short replies still relax when
+  speech ends.
+
+### Added — Dialogflow CX as the first answer (LLM fallback)
+- New `ai/dialogflow.py`: each turn is sent to a Dialogflow CX agent first; a confident
+  **intent** match (rejecting `NO_MATCH`/generative `PLAYBOOK`) is spoken verbatim and
+  the LLM is skipped. Anything it doesn't match falls through to the LLM. Off by default
+  (`DIALOGFLOW_ENABLED`); graceful no-op if the lib/key is missing. Fresh CX session per
+  visitor. New **Dialogflow** panel tab: enable + project/location/agent/key/confidence +
+  a live "test the agent" box.
+- Targets the bilingual **Nova-1** agent (`nova-1-474411` / `asia-south1`).
+  `tools/cx_import.py` discovers the agent by name, **adds Arabic**, pins it to its intent
+  flow (not a generative Playbook), purges, imports `tools/nif_qa.json` (NIF/NDF Q&A — the
+  two verbatim answer blocks + faithful translations + many EN/AR phrasings), and trains.
+  `tools/cx_test.py` verifies both languages. **Verified: both Arabic and English test
+  cases match at confidence 1.00 with the exact answers.**
+- **Arabic numbers spelled out:** Arabic responses (and the system persona) write
+  numbers/years/dates as Arabic WORDS, not digits (e.g. «ألفين وأربعة وعشرين»), and drop
+  Latin acronyms — ElevenLabs' Arabic voice skips digits and mispronounces Latin text.
+
+### Hardening — post-review fixes (adversarial review of this changeset)
+- Movement parser rewritten to be safe: Arabic now requires a real motion **verb**
+  (whole-word) before any direction, so clitic-glued nouns (أحزاب اليمين, باليمين,
+  التقدم, وقفة) no longer move the robot; English drops the "go ahead" filler and guards
+  idioms ("move forward with the plan"). Length-capped to terse commands.
+- `robot/locomotion.py` no longer drives if `LocoClient.Start()` fails (won't lurch a
+  non-standing robot). Movement safety bounds centralized in `app/movement.py`.
+- Dialogflow client does its blocking init off the event loop, and accepts only true
+  INTENT matches (allow-list). `/api/dialogflow/test` no longer blocks the panel loop.
+- `ROBOT_SPEAKER_TAIL_DRAIN_MS` makes the chunk-drain margin tunable for the real robot.
+
+### Added — experimental voice movement commands (off by default)
+- `MOVEMENT_COMMANDS_ENABLED`: "move forward/back/left/right", "turn left/right", "stop"
+  (English + Arabic) drive the G1 a short, bounded, low-speed distance via `LocoClient`
+  (`robot/locomotion.py` + `app/movement.py` parser). Robot must be standing in Main mode.
+  Toggle + speed/duration in the panel's Gestures tab. Safety-clamped; never fires on
+  ordinary questions.
+
+### Added — selectable STT backend (faster)
+- `STT_BACKEND=openai|groq`. Groq **`whisper-large-v3-turbo`** is an OpenAI-compatible,
+  much faster + cheaper backend with strong Arabic+English (set `GROQ_API_KEY`, pick it in
+  the Speech tab; falls back to OpenAI if the key is missing). See `RESEARCH.md` for the
+  STT comparison and a custom-gesture (`rt/arm_sdk`) implementation path.
+
+### Changed — control-panel service control is diagnosable
+- The panel now captures the pipeline's stdout/stderr to `logs/pipeline.out.log`, waits
+  for it to settle, and **shows the exit code + last output when it fails to start**
+  (subprocess mode) instead of a silent "stopped"; systemd mode surfaces
+  ActiveState/Result + the journal tail. New "pipeline (stdout)" console log + a
+  dashboard error box.
+
 ## [0.2.1] — 2026-06-18 — One-move gesture, richer head LED, chunked speech
 
 Refinements after on-robot feedback.

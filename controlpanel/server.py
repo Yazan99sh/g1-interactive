@@ -15,7 +15,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from . import cost, env_file, gestures, logtail, paths, speech
+from . import cost, dialogflow, env_file, gestures, logtail, movement, paths, speech
 from .process_manager import ProcessManager
 from .scripts import ScriptRunner, list_scripts, save_upload
 
@@ -241,6 +241,23 @@ async def set_gestures(payload: dict = Body(...)) -> dict:
     return {"ok": True, "restart_required": True}
 
 
+# ---- movement (experimental voice locomotion) ----
+@app.get("/api/movement")
+async def get_movement() -> dict:
+    return movement.get_config()
+
+
+@app.post("/api/movement")
+async def set_movement(payload: dict = Body(...)) -> dict:
+    changed = movement.set_config(
+        enabled=payload.get("enabled"),
+        speed=payload.get("speed"),
+        yaw=payload.get("yaw"),
+        duration_s=payload.get("duration_s"),
+    )
+    return {"ok": True, "restart_required": bool(changed)}
+
+
 # ---- speech (streaming + chunking latency toggles) ----
 @app.get("/api/speech")
 async def get_speech() -> dict:
@@ -253,8 +270,35 @@ async def set_speech(payload: dict = Body(...)) -> dict:
         streaming=payload.get("streaming"),
         chunking=payload.get("chunking"),
         chunk_max_chars=payload.get("chunk_max_chars"),
+        stt_backend=payload.get("stt_backend"),
     )
     return {"ok": True, "restart_required": bool(changed)}
+
+
+# ---- dialogflow (answer-first toggle + live test) ----
+@app.get("/api/dialogflow")
+async def get_dialogflow() -> dict:
+    return dialogflow.get_config()
+
+
+@app.post("/api/dialogflow")
+async def set_dialogflow(payload: dict = Body(...)) -> dict:
+    changed = dialogflow.set_config(
+        enabled=payload.get("enabled"),
+        confidence=payload.get("confidence"),
+        project=payload.get("project"),
+        location=payload.get("location"),
+        agent_id=payload.get("agent_id"),
+        key_path=payload.get("key_path"),
+    )
+    return {"ok": True, "restart_required": bool(changed)}
+
+
+@app.post("/api/dialogflow/test")
+def test_dialogflow(payload: dict = Body(...)) -> dict:
+    # Sync def -> Starlette runs it in the threadpool; detect_intent is a blocking gRPC
+    # round-trip and must NOT run on the event loop (it would freeze the whole panel).
+    return dialogflow.test_query(payload.get("query", ""))
 
 
 # ---- scripts ----

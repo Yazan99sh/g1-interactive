@@ -1,8 +1,11 @@
-"""Speech-to-text via OpenAI ``gpt-4o-transcribe``.
+"""Speech-to-text — OpenAI ``gpt-4o-transcribe`` (default) or Groq Whisper.
 
-Mirrors ``super-star``'s OpenAiSttProvider: multipart upload of a WAV, JSON
-response, language inferred from the transcript's script (gpt-4o-transcribe only
-supports ``response_format=json``, which carries no language field).
+Mirrors ``super-star``'s OpenAiSttProvider: multipart upload of a WAV, JSON response,
+language inferred from the transcript's script. Groq exposes an OpenAI-COMPATIBLE
+transcription endpoint (whisper-large-v3-turbo) that is much faster and cheaper with
+strong Arabic+English, so the same request code serves both — only the base URL, key
+and model differ. ``make_transcriber()`` picks the backend from STT_BACKEND and falls
+back to OpenAI if the selected backend's key is missing.
 """
 from __future__ import annotations
 
@@ -17,14 +20,22 @@ from config import settings
 
 log = get_logger("ai.stt")
 
-BASE_URL = "https://api.openai.com/v1/audio/transcriptions"
+OPENAI_URL = "https://api.openai.com/v1/audio/transcriptions"
+GROQ_URL = "https://api.groq.com/openai/v1/audio/transcriptions"
+BASE_URL = OPENAI_URL  # back-compat alias
 
 
 class OpenAITranscriber:
-    def __init__(self, http: httpx.AsyncClient, api_key: Optional[str] = None, model: Optional[str] = None) -> None:
+    """OpenAI-compatible Whisper-style transcriber (OpenAI or Groq)."""
+
+    def __init__(self, http: httpx.AsyncClient, api_key: Optional[str] = None,
+                 model: Optional[str] = None, base_url: str = OPENAI_URL,
+                 name: str = "openai") -> None:
         self.http = http
         self.api_key = api_key or settings.OPENAI_API_KEY
         self.model = model or settings.OPENAI_STT_MODEL
+        self.base_url = base_url
+        self.name = name
 
     @property
     def available(self) -> bool:
@@ -44,7 +55,7 @@ class OpenAITranscriber:
         headers = {"Authorization": f"Bearer {self.api_key}"}
 
         try:
-            resp = await self.http.post(BASE_URL, headers=headers, data=data, files=files, timeout=30.0)
+            resp = await self.http.post(self.base_url, headers=headers, data=data, files=files, timeout=30.0)
         except Exception:
             log_exception(log, "STT request failed (network)")
             return Transcription(text="", error=True)
@@ -60,5 +71,18 @@ class OpenAITranscriber:
             return Transcription(text="", error=True)
 
         lang = detect_language(text)
-        log.info("STT (%s): '%s' [%s]", self.model, text, lang.value if lang else "?")
+        log.info("STT (%s/%s): '%s' [%s]", self.name, self.model, text, lang.value if lang else "?")
         return Transcription(text=text, language=lang)
+
+
+def make_transcriber(http: httpx.AsyncClient) -> OpenAITranscriber:
+    """Build the transcriber for STT_BACKEND, falling back to OpenAI if the selected
+    backend's key is missing."""
+    backend = settings.STT_BACKEND
+    if backend == "groq":
+        if settings.GROQ_API_KEY:
+            log.info("STT backend: Groq (%s).", settings.GROQ_STT_MODEL)
+            return OpenAITranscriber(http, api_key=settings.GROQ_API_KEY,
+                                     model=settings.GROQ_STT_MODEL, base_url=GROQ_URL, name="groq")
+        log.warning("STT_BACKEND=groq but GROQ_API_KEY is not set — falling back to OpenAI.")
+    return OpenAITranscriber(http, name="openai")

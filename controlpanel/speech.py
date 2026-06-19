@@ -31,11 +31,20 @@ def _get_int(key: str, default: int) -> int:
         return default
 
 
+def _get_str(key: str, default: str) -> str:
+    raw = env_file.get(paths.ENV_FILE, key)
+    return raw if raw not in (None, "") else default
+
+
+STT_BACKENDS = ("openai", "groq")
+
+
 def get_config() -> dict:
     return {
         "streaming": _get_bool("STREAMING_ENABLED", True),
         "chunking": _get_bool("TTS_CHUNKING_ENABLED", True),
         "chunk_max_chars": _get_int("TTS_CHUNK_MAX_CHARS", 180),
+        "stt_backend": _get_str("STT_BACKEND", "openai").strip().lower(),
     }
 
 
@@ -43,7 +52,7 @@ def get_config() -> dict:
 CHUNK_MIN, CHUNK_MAX = 40, 600
 
 
-def set_config(streaming=None, chunking=None, chunk_max_chars=None) -> bool:
+def set_config(streaming=None, chunking=None, chunk_max_chars=None, stt_backend=None) -> bool:
     """Write any provided settings to .env. Returns True iff something was written."""
     updates: dict[str, str] = {}
     if streaming is not None:
@@ -57,6 +66,10 @@ def set_config(streaming=None, chunking=None, chunk_max_chars=None) -> bool:
                 updates["TTS_CHUNK_MAX_CHARS"] = str(n)
         except (TypeError, ValueError):
             pass
+    if stt_backend is not None:
+        b = str(stt_backend).strip().lower()
+        if b in STT_BACKENDS:
+            updates["STT_BACKEND"] = b
     if updates:
         env_file.update(paths.ENV_FILE, updates)
     return bool(updates)

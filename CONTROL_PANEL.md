@@ -10,13 +10,14 @@ whether it runs as a **systemd service** or as a **panel-managed subprocess**
 
 | Tab | What you can do |
 |-----|-----------------|
-| **Dashboard** | Pipeline status (running/stopped + mode), turns logged, estimated API cost, install-as-service button |
-| **Console** | Live `g1.log` / `errors.log` stream, pause/clear, change the **log level** |
+| **Dashboard** | Pipeline status (running/stopped + mode), turns logged, estimated API cost, install-as-service button. If the pipeline **fails to start**, shows the exit code + last output so you can see why |
+| **Console** | Live `g1.log` / `errors.log` / `pipeline (stdout)` stream, pause/clear, change the **log level** |
 | **Conversation** | Live transcript (what the visitor said / what the robot said, with language + emotion), estimated cost with an editable price table |
 | **Knowledge** | Browse/edit/create/delete the `knowledge/*.md` FAQ + facts |
 | **Instructions** | Edit the robot's persona / system prompt (`prompts/persona.md`) |
-| **Gestures** | Pick the one arm move the robot makes when it starts talking, and the wake / meet-and-greet wave — named-gesture dropdowns (no raw ids) |
-| **Speech** | Toggle streaming + chunked speech and set the piece size — controls how fast the robot starts talking |
+| **Gestures** | Pick the one arm move the robot makes when it starts talking, and the wake / meet-and-greet wave — named-gesture dropdowns (no raw ids). Also the **experimental Movement** toggle (voice "move forward/left/…", speed + duration) |
+| **Speech** | Pick the **STT engine** (OpenAI / Groq Whisper), toggle streaming + chunked speech and set the piece size — controls how fast the robot listens + starts talking |
+| **Dialogflow** | Turn **Dialogflow CX answer-first** on/off (LLM fallback), set the agent (project/location/agent id/key) + confidence, and **live-test** the agent from a query box |
 | **Environment** | Edit `.env` — API keys (masked), **ElevenLabs voice id**, head-LED colours, and every tunable, grouped by section |
 | **Scripts** | Run the diagnostic/action scripts in `tools/` and `scripts/` with live output; upload new `.py` scripts |
 

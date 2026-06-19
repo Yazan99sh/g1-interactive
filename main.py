@@ -16,9 +16,10 @@ import signal
 
 import httpx
 
+from ai.dialogflow import DialogflowClient
 from ai.knowledge_base import KnowledgeBase
 from ai.llm import LLMEngine
-from ai.stt import OpenAITranscriber
+from ai.stt import make_transcriber
 from ai.tts import ElevenLabsTTS
 from app.controller import Controller
 from app.conversation import ConversationManager
@@ -30,6 +31,7 @@ from audio.wake import WakeWordDetector
 from config import settings
 from robot.interfaces import ArmController, NullArmController
 from robot.led import LedIndicator
+from robot.locomotion import NullLocomotion
 
 log = get_logger("main")
 
@@ -39,6 +41,7 @@ def _init_dds_if_needed() -> None:
         settings.AUDIO_SINK == "robot"
         or settings.MIC_SOURCE == "robot"
         or settings.ARM_GESTURES_ENABLED
+        or settings.MOVEMENT_COMMANDS_ENABLED
     )
     if not need_dds:
         log.info("DDS not needed (robot components disabled).")
@@ -60,6 +63,17 @@ def build_arm() -> ArmController:
         except Exception:
             log_exception(log, "G1 arm controller unavailable — using NullArmController")
     return NullArmController()
+
+
+def build_locomotion():
+    """Experimental voice movement (LocoClient). NullLocomotion unless enabled + on robot."""
+    if settings.ROBOT_ENABLED and settings.MOVEMENT_COMMANDS_ENABLED:
+        try:
+            from robot.locomotion import G1Locomotion
+            return G1Locomotion()
+        except Exception:
+            log_exception(log, "G1 locomotion unavailable — movement commands disabled")
+    return NullLocomotion()
 
 
 def build_sink() -> AudioSink:
@@ -105,7 +119,7 @@ async def amain() -> None:
     http = httpx.AsyncClient()
     controller: Controller | None = None
     try:
-        transcriber = OpenAITranscriber(http)
+        transcriber = make_transcriber(http)
         tts = ElevenLabsTTS(http)
         llm = LLMEngine(http)
         kb = KnowledgeBase(settings.KNOWLEDGE_DIR)
@@ -116,6 +130,7 @@ async def amain() -> None:
         # event-loop thread so a slow/unreachable robot can't stall startup.
         arm = await loop.run_in_executor(None, build_arm)
         sink = await loop.run_in_executor(None, build_sink)
+        locomotion = await loop.run_in_executor(None, build_locomotion)
         # openWakeWord model load can take a couple seconds — keep it off the loop.
         wake_audio = await loop.run_in_executor(None, build_wake_audio)
         mic = build_mic()  # constructor does no I/O (socket join is in open())
@@ -124,7 +139,9 @@ async def amain() -> None:
                  "openWakeWord" if wake_audio else "stt")
 
         led = LedIndicator(sink)  # head-LED state indicator (shared by both)
-        pipeline = ConversationPipeline(transcriber, llm, tts, kb, conversation, arm, sink, led=led)
+        dialogflow = DialogflowClient()  # optional "first answer"; no-op unless enabled
+        pipeline = ConversationPipeline(transcriber, llm, tts, kb, conversation, arm, sink,
+                                        led=led, dialogflow=dialogflow, locomotion=locomotion)
         controller = Controller(
             mic=mic,
             transcriber=transcriber,

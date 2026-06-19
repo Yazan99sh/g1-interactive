@@ -46,6 +46,15 @@ async function refreshStatus() {
       ? "systemd is available — you can install the pipeline as a user service."
       : "systemd not detected — the panel manages the pipeline as a subprocess.";
     $("btnInstallService").style.display = s.systemd_available ? "" : "none";
+    // When stopped, surface WHY (captured stdout/stderr or journal tail) so a failed
+    // launch isn't a silent "stopped".
+    const errWrap = $("dashErrorWrap");
+    if (!s.running && s.recent_output) {
+      $("dashError").textContent = s.recent_output;
+      errWrap.classList.remove("hidden");
+    } else {
+      errWrap.classList.add("hidden");
+    }
   } catch (e) { /* panel reachable check handled elsewhere */ }
 }
 async function procAction(path) {
@@ -164,6 +173,13 @@ tabInit.gestures = async () => {
   const talkId = (g.talk_ids && g.talk_ids.length) ? g.talk_ids[0] : null;
   $("talkGesture").innerHTML = gestureOptions(g.catalog, talkId);
   $("wakeGesture").innerHTML = gestureOptions(g.catalog, g.wake_id);
+  try {
+    const m = await api("/api/movement");
+    $("mvEnabled").checked = !!m.enabled;
+    $("mvSpeed").value = m.speed;
+    $("mvYaw").value = m.yaw;
+    $("mvDur").value = m.duration_s;
+  } catch (_) {}
 };
 
 // ---- speech (latency toggles) ----
@@ -172,6 +188,19 @@ tabInit.speech = async () => {
   $("spStreaming").checked = !!s.streaming;
   $("spChunking").checked = !!s.chunking;
   $("spChunkChars").value = s.chunk_max_chars;
+  $("spSttBackend").value = s.stt_backend || "openai";
+};
+
+// ---- dialogflow (answer-first toggle + live test) ----
+tabInit.dialogflow = async () => {
+  const d = await api("/api/dialogflow");
+  $("dfEnabled").checked = !!d.enabled;
+  $("dfProject").value = d.project || "";
+  $("dfLocation").value = d.location || "";
+  $("dfAgent").value = d.agent_id || "";
+  $("dfKey").value = d.key_path || "";
+  $("dfConf").value = d.confidence;
+  $("dfTestOut").textContent = "";
 };
 
 // ---- environment ----
@@ -284,14 +313,51 @@ function wire() {
     catch (e) { toast("Save failed: " + e.message, true); }
   };
 
+  $("btnMovementSave").onclick = async () => {
+    const body = {
+      enabled: $("mvEnabled").checked,
+      speed: parseFloat($("mvSpeed").value),
+      yaw: parseFloat($("mvYaw").value),
+      duration_s: parseFloat($("mvDur").value),
+    };
+    try { const r = await api("/api/movement", { method: "POST", body }); toast("Movement settings saved"); if (r.restart_required) showRestart(); }
+    catch (e) { toast("Save failed: " + e.message, true); }
+  };
+
   $("btnSpeechSave").onclick = async () => {
     const body = {
       streaming: $("spStreaming").checked,
       chunking: $("spChunking").checked,
       chunk_max_chars: parseInt($("spChunkChars").value, 10),
+      stt_backend: $("spSttBackend").value,
     };
     try { const r = await api("/api/speech", { method: "POST", body }); toast("Speech settings saved"); if (r.restart_required) showRestart(); }
     catch (e) { toast("Save failed: " + e.message, true); }
+  };
+
+  $("btnDfSave").onclick = async () => {
+    const body = {
+      enabled: $("dfEnabled").checked,
+      project: $("dfProject").value.trim(),
+      location: $("dfLocation").value.trim(),
+      agent_id: $("dfAgent").value.trim(),
+      key_path: $("dfKey").value.trim(),
+      confidence: parseFloat($("dfConf").value),
+    };
+    try { const r = await api("/api/dialogflow", { method: "POST", body }); toast("Dialogflow settings saved"); if (r.restart_required) showRestart(); }
+    catch (e) { toast("Save failed: " + e.message, true); }
+  };
+  $("btnDfTest").onclick = async () => {
+    const q = $("dfTestQ").value;
+    if (!q.trim()) { toast("Type a question to test", true); return; }
+    $("dfTestOut").textContent = "Testing…";
+    try {
+      const r = await api("/api/dialogflow/test", { method: "POST", body: { query: q } });
+      if (!r.ok) { $("dfTestOut").textContent = "✗ " + (r.detail || "failed"); return; }
+      const hit = r.match_type === "INTENT" ? "✓ matched" : "✗ no confident intent";
+      $("dfTestOut").textContent =
+        `${hit}\nlang: ${r.lang}   match: ${r.match_type}   intent: ${r.intent || "-"}   conf: ${r.confidence}\n\n${r.answer || "(no answer)"}`;
+    } catch (e) { $("dfTestOut").textContent = "✗ " + e.message; }
   };
 
   $("btnEnvSave").onclick = saveEnv;

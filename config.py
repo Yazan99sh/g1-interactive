@@ -88,7 +88,14 @@ class Settings:
     LLM_MAX_TOKENS: int = field(default_factory=lambda: _get_int("LLM_MAX_TOKENS", 0))
 
     # ---- STT ----
+    # Which transcription backend to use. "openai" = gpt-4o-transcribe (default).
+    # "groq" = Whisper large-v3-turbo on Groq — an OpenAI-compatible endpoint that is
+    # much faster (and cheaper) with strong Arabic+English; needs GROQ_API_KEY. Falls
+    # back to OpenAI if the selected backend's key is missing. Pick it in the panel.
+    STT_BACKEND: str = field(default_factory=lambda: _get("STT_BACKEND", "openai").strip().lower())
     OPENAI_STT_MODEL: str = field(default_factory=lambda: _get("OPENAI_STT_MODEL", "gpt-4o-transcribe"))
+    GROQ_API_KEY: str = field(default_factory=lambda: _get("GROQ_API_KEY"))
+    GROQ_STT_MODEL: str = field(default_factory=lambda: _get("GROQ_STT_MODEL", "whisper-large-v3-turbo"))
 
     # ---- TTS ----
     ELEVENLABS_MODEL: str = field(default_factory=lambda: _get("ELEVENLABS_MODEL", "eleven_flash_v2_5"))
@@ -153,6 +160,11 @@ class Settings:
     DDS_DOMAIN: int = field(default_factory=lambda: _get_int("DDS_DOMAIN", 0))
     DDS_INTERFACE: str = field(default_factory=lambda: _get("DDS_INTERFACE", "ens37"))
     ROBOT_SPEAKER_VOLUME: int = field(default_factory=lambda: _get_int("ROBOT_SPEAKER_VOLUME", 80))
+    # Extra wait after a chunk's audio is accounted for, covering DDS transport + the
+    # robot's playback-start latency so the next chunked piece doesn't clip this one's
+    # tail. If you still hear pieces overlap on the robot, raise this; if there are
+    # audible gaps between pieces, lower it. Validate on the real robot.
+    ROBOT_SPEAKER_TAIL_DRAIN_MS: int = field(default_factory=lambda: _get_int("ROBOT_SPEAKER_TAIL_DRAIN_MS", 200))
     ARM_GESTURES_ENABLED: bool = field(default_factory=lambda: _get_bool("ARM_GESTURES_ENABLED", True))
     # If true, command the locomotion FSM (LocoClient.Start) at startup so arm
     # actions are accepted. Leave FALSE for safety: put the robot in Main/Regular
@@ -164,6 +176,10 @@ class Settings:
     # The single arm move performed when the robot starts talking (first id wins).
     # 23 = right-hand-up (one gentle move). Pick it from the panel's Gestures tab.
     TALK_GESTURE_IDS: list[int] = field(default_factory=lambda: _get_int_list("TALK_GESTURE_IDS", "23"))
+    # How long to hold the talking gesture before returning to the neutral pose, even
+    # if the robot is still speaking (clamped 1000-3000 ms). A brief hold then back-to-
+    # rest looks deliberate; holding a raised hand for a whole long reply looks weird.
+    TALK_GESTURE_HOLD_MS: int = field(default_factory=lambda: _get_int("TALK_GESTURE_HOLD_MS", 2000))
     # Arm action played on wake / meet-and-greet ("Aha!"). 25 = wave with the right
     # hand up near the head.
     WAKE_GESTURE_ID: int = field(default_factory=lambda: _get_int("WAKE_GESTURE_ID", 25))
@@ -194,6 +210,33 @@ class Settings:
     )
     LED_PULSE_PERIOD_MS: int = field(default_factory=lambda: _get_int("LED_PULSE_PERIOD_MS", 1600))
 
+    # ---- Dialogflow CX (optional "first answer" before the LLM) ----
+    # When enabled, each turn is sent to a Dialogflow CX agent FIRST; a confident
+    # intent match is spoken verbatim and the LLM is skipped. Anything CX doesn't match
+    # falls through to the LLM. Defaults target the bilingual "Nova-1" agent. Toggle and
+    # tune from the panel's Dialogflow tab. detectIntent needs the google-cloud-
+    # dialogflow-cx lib + a service-account key; if either is missing it silently
+    # disables and the robot just uses the LLM.
+    DIALOGFLOW_ENABLED: bool = field(default_factory=lambda: _get_bool("DIALOGFLOW_ENABLED", False))
+    DIALOGFLOW_PROJECT: str = field(default_factory=lambda: _get("DIALOGFLOW_PROJECT", "nova-1-474411"))
+    DIALOGFLOW_LOCATION: str = field(default_factory=lambda: _get("DIALOGFLOW_LOCATION", "asia-south1"))
+    DIALOGFLOW_AGENT_ID: str = field(default_factory=lambda: _get("DIALOGFLOW_AGENT_ID", "acada473-7777-4ae3-a27e-c0218644aaf5"))
+    # Path to the Google service-account JSON (runtime needs only the "Dialogflow API
+    # Client" role). Blank = use the GOOGLE_APPLICATION_CREDENTIALS env var.
+    DIALOGFLOW_KEY_PATH: str = field(default_factory=lambda: _get("DIALOGFLOW_KEY_PATH", ""))
+    # Minimum match confidence to accept a CX answer (else fall through to the LLM).
+    DIALOGFLOW_CONFIDENCE: float = field(default_factory=lambda: _get_float("DIALOGFLOW_CONFIDENCE", 0.6))
+
+    # ---- Experimental: voice movement commands ----
+    # OFF by default. When on, "move forward/back/left/right", "turn left/right" and
+    # "stop" drive the G1 a SHORT, time-bounded distance via LocoClient. The robot must
+    # be STANDING in Main/Regular mode (R1+X). Conservative speeds — experimental, test
+    # carefully and keep clear space around the robot. Toggle from the panel.
+    MOVEMENT_COMMANDS_ENABLED: bool = field(default_factory=lambda: _get_bool("MOVEMENT_COMMANDS_ENABLED", False))
+    MOVE_SPEED: float = field(default_factory=lambda: _get_float("MOVE_SPEED", 0.2))            # m/s
+    MOVE_YAW: float = field(default_factory=lambda: _get_float("MOVE_YAW", 0.4))                # rad/s
+    MOVE_DURATION_S: float = field(default_factory=lambda: _get_float("MOVE_DURATION_S", 1.5))  # seconds per command
+
     # ---- Knowledge base ----
     KB_STRICT: bool = field(default_factory=lambda: _get_bool("KB_STRICT", False))
 
@@ -215,13 +258,18 @@ class Settings:
             "OPENAI_API_KEY": mask(self.OPENAI_API_KEY),
             "OPENROUTER_API_KEY": mask(self.OPENROUTER_API_KEY),
             "ELEVENLABS_API_KEY": mask(self.ELEVENLABS_API_KEY),
+            "GROQ_API_KEY": (mask(self.GROQ_API_KEY) if self.STT_BACKEND == "groq" else "—"),
             "LLM_BACKEND": self.LLM_BACKEND,
             "STREAMING_ENABLED": self.STREAMING_ENABLED,
             "OPENROUTER_MODEL": self.OPENROUTER_MODEL,
+            "STT_BACKEND": self.STT_BACKEND,
             "OPENAI_STT_MODEL": self.OPENAI_STT_MODEL,
+            "GROQ_STT_MODEL": self.GROQ_STT_MODEL if self.STT_BACKEND == "groq" else "—",
             "ELEVENLABS_MODEL": self.ELEVENLABS_MODEL,
             "TTS_OUTPUT_FORMAT": self.TTS_OUTPUT_FORMAT,
             "TTS_CHUNKING_ENABLED": self.TTS_CHUNKING_ENABLED,
+            "DIALOGFLOW_ENABLED": self.DIALOGFLOW_ENABLED,
+            "DIALOGFLOW_AGENT": f"{self.DIALOGFLOW_PROJECT}/{self.DIALOGFLOW_LOCATION}/{self.DIALOGFLOW_AGENT_ID}" if self.DIALOGFLOW_ENABLED else "off",
             "SAMPLE_RATE": self.SAMPLE_RATE,
             "MIC_SOURCE": self.MIC_SOURCE,
             "AUDIO_SINK": self.AUDIO_SINK,

@@ -89,6 +89,10 @@ class Controller:
             await self.led.stop()
             await self.mic.close()
             await self.arm.close()
+            try:
+                await self.pipeline.locomotion.close()
+            except Exception:
+                pass
             await self.pipeline.sink.close()
 
     def stop(self) -> None:
@@ -141,6 +145,10 @@ class Controller:
             log.info("Continuing conversation — memory kept (idle %.0fs ≤ %ds).",
                      self.conversation.seconds_idle(), timeout)
         self.conversation.set_language(lang)
+        # Fresh Dialogflow CX session per visitor so turns share context but a new
+        # person starts clean.
+        if getattr(self.pipeline, "dialogflow", None):
+            self.pipeline.dialogflow.new_session()
 
     async def _standby_openwakeword(self) -> None:
         # Feed raw mic frames to the local model — no STT in standby. The model is

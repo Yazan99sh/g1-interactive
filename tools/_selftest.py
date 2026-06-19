@@ -64,7 +64,8 @@ msgs = cm.build_messages("مرحبا", "some kb context")
 check("convo msgs", msgs[0].role == "system" and "Arabic" in msgs[0].content and msgs[-1].content == "مرحبا")
 
 # 8. full module graph imports (no network calls)
-import ai.stt, ai.tts, ai.llm, app.pipeline, app.controller, audio.mic, audio.sink  # noqa
+import ai.stt, ai.tts, ai.llm, ai.dialogflow, app.pipeline, app.controller  # noqa
+import app.movement, robot.locomotion, audio.mic, audio.sink  # noqa
 check("imports", True)
 
 # 9. TTS chunk splitter (for faster first audio)
@@ -87,6 +88,48 @@ from robot.led import LedIndicator  # noqa: E402
 _led = LedIndicator(None)
 _led.set_state("thinking"); _led.set_state("speaking")  # must not raise
 check("led noop", _led._enabled is False)
+
+# 11. movement parser (EN + AR + false-positive guards)
+from app.movement import parse_movement  # noqa: E402
+check("mv forward", parse_movement("move forward").kind == "forward")
+check("mv backup", parse_movement("back up").kind == "backward")
+check("mv turn left", parse_movement("turn left").kind == "turn_left")
+check("mv ar forward", parse_movement("تقدم للأمام").kind == "forward")
+check("mv ar turn", parse_movement("لف يسار").kind == "turn_left")
+check("mv ar stop", parse_movement("وقف").kind == "stop")
+check("mv no-overfire", parse_movement("what is to the left of the building") is None)
+check("mv question", parse_movement("tell me about the fund") is None)
+check("mv ar-noun-right", parse_movement("أحزاب اليمين المتطرف") is None)   # right-wing parties
+check("mv ar-noun-eat", parse_movement("ما حكم الأكل باليمين") is None)     # eating with the right hand
+check("mv ar-pause-noun", parse_movement("وقفة احتجاجية") is None)          # a protest (not 'stop')
+check("mv ar-progress", parse_movement("ما هو التقدم الذي أحرزته") is None) # 'progress' (not 'forward')
+check("mv en-idiom", parse_movement("let's move forward with the plan") is None)
+check("mv en-goahead", parse_movement("go ahead and tell me a joke") is None)
+check("mv ar-stop-word", parse_movement("وقف").kind == "stop")             # bare stop still works
+
+# 12. STT backend factory (default openai; groq falls back without a key)
+import httpx  # noqa: E402
+from ai.stt import make_transcriber, OPENAI_URL, GROQ_URL  # noqa: E402
+_h = httpx.AsyncClient()
+_orig_backend, _orig_key = settings.STT_BACKEND, settings.GROQ_API_KEY
+try:
+    settings.STT_BACKEND = "openai"
+    check("stt default openai", make_transcriber(_h).base_url == OPENAI_URL)
+    settings.STT_BACKEND = "groq"; settings.GROQ_API_KEY = ""
+    check("stt groq fallback", make_transcriber(_h).name == "openai")
+    settings.GROQ_API_KEY = "gsk_test"
+    _g = make_transcriber(_h)
+    check("stt groq selected", _g.name == "groq" and _g.base_url == GROQ_URL)
+finally:
+    settings.STT_BACKEND, settings.GROQ_API_KEY = _orig_backend, _orig_key
+    import asyncio as _a; _a.run(_h.aclose())
+
+# 13. Dialogflow client is a safe no-op when disabled
+from ai.dialogflow import DialogflowClient  # noqa: E402
+_df = DialogflowClient(); _df.enabled = False
+check("df noop ensure", _df._ensure() is False)
+_s1 = _df._session_id; _df.new_session()
+check("df session rotates", _df._session_id != _s1)
 
 print("\nALL PASS" if ok else "\nSOME FAILED")
 sys.exit(0 if ok else 1)

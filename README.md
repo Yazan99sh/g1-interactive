@@ -33,8 +33,12 @@ deployed exactly like the teleop setup: a Linux host on the robot's
 | **Standby** | VAD-gated capture; transcribe only when someone speaks; match a wake phrase | OpenAI STT + wake matcher |
 | **Ack** | Robot says "Aha!" and waves | ElevenLabs + arm gesture |
 | **Listening** | Capture the user's utterance, end-pointed by silence | `sounddevice` mic + RMS VAD |
-| **Thinking** | Knowledge base retrieval → LLM (with persona, bilingual) | OpenRouter → OpenAI |
-| **Responding** | Speak the reply; arms gesture to match the emotion; then relax | ElevenLabs (PCM) → G1 speaker |
+| **Thinking** | Optional Dialogflow CX answer-first → else knowledge base retrieval → LLM (persona, bilingual) | Dialogflow CX → OpenRouter → OpenAI |
+| **Responding** | Speak the reply; one arm move (then relaxes after 1–3 s); LED by state | ElevenLabs (PCM) → G1 speaker |
+
+**STT** is selectable (`STT_BACKEND`): OpenAI `gpt-4o-transcribe` (default) or Groq
+`whisper-large-v3-turbo` (faster). Experimental voice **movement** commands ("move
+forward", "turn left", "وقف") can be enabled from the panel. See `RESEARCH.md`.
 
 Reply text starts with an `[EMOTION:happy]`-style tag (stripped before speaking)
 that selects the arm gesture + LED colour — same trick as `super-star`.
@@ -57,10 +61,15 @@ g1-interactive/
     pipeline.py           one turn: Transcribe → Think → Respond(+gesture)
     controller.py         master state machine: Standby ↔ Converse, idle-after-10
   ai/
-    stt.py                OpenAI gpt-4o-transcribe
+    stt.py                STT — OpenAI gpt-4o-transcribe or Groq Whisper (STT_BACKEND)
     tts.py                ElevenLabs flash v2.5 (raw PCM output)
     llm.py                OpenRouter (primary) → OpenAI (fallback)
+    dialogflow.py         optional Dialogflow CX "answer-first" stage (LLM fallback)
     knowledge_base.py     loads knowledge/*.md, RAG + verbatim FAQ
+  app/
+    movement.py           experimental voice movement-command parser (EN + AR)
+  robot/
+    locomotion.py         experimental G1 LocoClient walk wrapper (off by default)
   audio/
     mic.py                host mic capture (sounddevice) + utterance recorder
     vad.py                RMS voice-activity segmenter

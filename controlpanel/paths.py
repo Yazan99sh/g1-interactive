@@ -25,7 +25,13 @@ MAIN_PY = PROJECT_DIR / "main.py"
 STATIC_DIR = PKG_DIR / "static"
 STATE_DIR = PKG_DIR / "state"
 
-LOG_FILES = {"g1": LOGS_DIR / "g1.log", "errors": LOGS_DIR / "errors.log"}
+LOG_FILES = {
+    "g1": LOGS_DIR / "g1.log",
+    "errors": LOGS_DIR / "errors.log",
+    # Raw stdout+stderr of the pipeline process (subprocess mode) — shows crashes that
+    # happen before logging is even set up (bad import, missing key, etc.).
+    "pipeline": LOGS_DIR / "pipeline.out.log",
+}
 
 
 def ensure_state_dir() -> Path:
