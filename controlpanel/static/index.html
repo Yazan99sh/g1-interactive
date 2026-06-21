@@ -41,6 +41,7 @@
       <button class="navItem" data-tab="dialogflow">🟢 Dialogflow</button>
       <button class="navItem" data-tab="search">🔎 Web Search</button>
       <button class="navItem" data-tab="memory">🧠 Memory</button>
+      <button class="navItem" data-tab="vision">👁️ Vision</button>
       <button class="navItem" data-tab="environment">🔑 Environment</button>
       <button class="navItem" data-tab="scripts">⚙️ Scripts</button>
     </nav>
@@ -260,6 +261,29 @@
             <pre id="memSessionView" class="console"></pre>
           </div>
         </div>
+      </section>
+
+      <!-- Vision -->
+      <section class="tab" id="tab-vision">
+        <h2>Vision <span class="muted">peek — look at something and describe it out loud</span></h2>
+        <div class="card">
+          <label class="toggle"><input type="checkbox" id="vsCamera"> Enable the head camera</label>
+          <label class="toggle"><input type="checkbox" id="vsPeek"> Allow "peek" ("look at / show me / what do you see") — needs the camera</label>
+          <p class="muted">The robot says "let me take a look", grabs one frame, and describes what it sees. Nothing is saved — the description is only used in the conversation. English + Arabic.</p>
+        </div>
+        <div class="card">
+          <div class="envField"><label for="vsUrl">Snapshot URL (Jetson helper)</label><input id="vsUrl" type="text" placeholder="http://192.168.123.164:8090/snapshot"></div>
+          <div class="envField"><label for="vsModel">Vision model (blank = same as LLM)</label><input id="vsModel" type="text" placeholder="e.g. gpt-4o for sharper scene understanding"></div>
+          <div class="envField"><label for="vsAnnEn">Announcement — English</label><input id="vsAnnEn" type="text"></div>
+          <div class="envField"><label for="vsAnnAr">Announcement — Arabic</label><input id="vsAnnAr" type="text" dir="rtl"></div>
+        </div>
+        <button id="btnVisionSave" class="btn">Save vision settings</button>
+        <div class="card">
+          <div class="card-label">Test the camera (fetch one frame)</div>
+          <div class="toolbar"><button id="btnVisionTest" class="btn btn-tiny">Capture test frame</button></div>
+          <pre id="vsTestOut" class="console"></pre>
+        </div>
+        <p class="muted">Run <code>tools/jetson_camera_server.py</code> on the G1 Jetson (PC2) first. Takes effect on restart.</p>
       </section>
 
       <!-- Environment -->

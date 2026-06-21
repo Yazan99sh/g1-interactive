@@ -247,6 +247,23 @@ class Settings:
     WEB_SEARCH_ANNOUNCE_EN: str = field(default_factory=lambda: _get("WEB_SEARCH_ANNOUNCE_EN", "Sure, let me look that up online."))
     WEB_SEARCH_ANNOUNCE_AR: str = field(default_factory=lambda: _get("WEB_SEARCH_ANNOUNCE_AR", "حسنًا، لحظة، خليني أبحث في الإنترنت."))
 
+    # ---- Vision / peek (head camera) ----
+    # OFF by default. When on, "look at / show me / what do you see" (EN+AR) makes the
+    # robot grab one head-camera frame and describe it OUT LOUD (the description lives in
+    # the conversation only — no photos are saved). The G1 has no DDS video service: a
+    # tiny helper on the Jetson (tools/jetson_camera_server.py) serves one JPEG over HTTP
+    # and we fetch CAMERA_SNAPSHOT_URL. PEEK is effective only when CAMERA_ENABLED.
+    CAMERA_ENABLED: bool = field(default_factory=lambda: _get_bool("CAMERA_ENABLED", False))
+    CAMERA_SNAPSHOT_URL: str = field(
+        default_factory=lambda: _get("CAMERA_SNAPSHOT_URL", "http://192.168.123.164:8090/snapshot"))
+    CAMERA_TIMEOUT_S: float = field(default_factory=lambda: _get_float("CAMERA_TIMEOUT_S", 6.0))
+    PEEK_ENABLED: bool = field(default_factory=lambda: _get_bool("PEEK_ENABLED", True))
+    # Vision model for describing the frame. Blank = use the LLM endpoint's own model
+    # (gpt-4o-mini supports vision). Set e.g. "gpt-4o" for sharper scene understanding.
+    VISION_MODEL: str = field(default_factory=lambda: _get("VISION_MODEL", ""))
+    PEEK_ANNOUNCE_EN: str = field(default_factory=lambda: _get("PEEK_ANNOUNCE_EN", "Sure, let me take a look."))
+    PEEK_ANNOUNCE_AR: str = field(default_factory=lambda: _get("PEEK_ANNOUNCE_AR", "حسنًا، خليني أشوف."))
+
     # ---- Robot brain / memory ----
     # Every finished session is snapshotted to brain/sessions + brain/logs on the host
     # (a "copy on the PC") whenever this is on — works even with long-term memory off.
@@ -310,6 +327,8 @@ class Settings:
             "DIALOGFLOW_AGENT": f"{self.DIALOGFLOW_PROJECT}/{self.DIALOGFLOW_LOCATION}/{self.DIALOGFLOW_AGENT_ID}" if self.DIALOGFLOW_ENABLED else "off",
             "MEMORY_SESSION_SNAPSHOTS": self.MEMORY_SESSION_SNAPSHOTS,
             "LONG_TERM_MEMORY_ENABLED": self.LONG_TERM_MEMORY_ENABLED,
+            "CAMERA_ENABLED": self.CAMERA_ENABLED,
+            "PEEK_ENABLED": self.PEEK_ENABLED and self.CAMERA_ENABLED,
             "SAMPLE_RATE": self.SAMPLE_RATE,
             "MIC_SOURCE": self.MIC_SOURCE,
             "AUDIO_SINK": self.AUDIO_SINK,

@@ -275,6 +275,18 @@ tabInit.memory = async () => {
   await loadSessionList();
 };
 
+// ---- vision (peek) ----
+tabInit.vision = async () => {
+  const v = await api("/api/vision");
+  $("vsCamera").checked = !!v.camera_enabled;
+  $("vsPeek").checked = !!v.peek_enabled;
+  $("vsUrl").value = v.snapshot_url || "";
+  $("vsModel").value = v.vision_model || "";
+  $("vsAnnEn").value = v.announce_en || "";
+  $("vsAnnAr").value = v.announce_ar || "";
+  $("vsTestOut").textContent = "";
+};
+
 // ---- environment ----
 const VOICE_KEYS = ["ELEVENLABS_VOICE_ID", "ELEVENLABS_ARABIC_VOICE_ID"];
 tabInit.environment = async () => {
@@ -482,6 +494,28 @@ function wire() {
       memCurrent = null; $("memContent").value = ""; $("memName").textContent = "Select a memory…";
       $("btnMemSave").disabled = true; $("btnMemDelete").disabled = true; loadMemList(); }
     catch (e) { toast("Delete failed: " + e.message, true); }
+  };
+
+  $("btnVisionSave").onclick = async () => {
+    const body = {
+      camera_enabled: $("vsCamera").checked,
+      peek_enabled: $("vsPeek").checked,
+      snapshot_url: $("vsUrl").value,
+      vision_model: $("vsModel").value,
+      announce_en: $("vsAnnEn").value,
+      announce_ar: $("vsAnnAr").value,
+    };
+    try { const r = await api("/api/vision", { method: "POST", body }); toast("Vision settings saved"); if (r.restart_required) showRestart(); }
+    catch (e) { toast("Save failed: " + e.message, true); }
+  };
+  $("btnVisionTest").onclick = async () => {
+    $("vsTestOut").textContent = "Capturing…";
+    try {
+      const r = await api("/api/vision/test", { method: "POST", body: {} });
+      $("vsTestOut").textContent = r.ok
+        ? `✓ got a frame — ${r.bytes} bytes${r.jpeg ? " (JPEG)" : ""}\n${r.url}`
+        : "✗ " + (r.detail || "failed");
+    } catch (e) { $("vsTestOut").textContent = "✗ " + e.message; }
   };
 
   $("btnEnvSave").onclick = saveEnv;

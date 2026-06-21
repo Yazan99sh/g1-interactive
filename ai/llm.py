@@ -6,6 +6,7 @@ URLs with an automatic fallback chain (same idea as ``super-star``'s AiEngine).
 """
 from __future__ import annotations
 
+import base64
 import json
 from dataclasses import dataclass
 from typing import AsyncIterator, Optional
@@ -13,7 +14,7 @@ from typing import AsyncIterator, Optional
 import httpx
 
 from app.logging_setup import get_logger, log_exception
-from app.state import ChatMessage
+from app.state import ChatMessage, Language
 from config import settings
 
 log = get_logger("ai.llm")
@@ -96,6 +97,58 @@ class LLMEngine:
             return text.strip()
 
         log.error("All LLM endpoints failed. Last error: %s", last_error)
+        return ""
+
+    async def describe_image(self, jpeg: bytes, question: str, language: Language) -> str:
+        """Look at a head-camera JPEG and answer the visitor's request in 1-2 spoken
+        sentences (for the 'peek' feature). Uses the same endpoint chain; the model is
+        ``VISION_MODEL`` if set, else the endpoint's own model (gpt-4o-mini supports
+        vision). Returns "" if every endpoint fails — the caller speaks a fallback."""
+        if not self.endpoints or not jpeg:
+            return ""
+        b64 = base64.b64encode(jpeg).decode("ascii")
+        lang_line = ("Reply in ARABIC, and write any number as Arabic words, not digits."
+                     if language is Language.ARABIC else "Reply in ENGLISH.")
+        system = (
+            "You are the eyes of a friendly humanoid robot greeting people in person. Look at "
+            "the photo from your camera and answer the person's request about what you see in ONE "
+            "or TWO short sentences, spoken aloud. " + lang_line + " Speak as if you are looking "
+            "right now; do NOT say 'image' or 'photo' or describe pixels. Begin with exactly one "
+            "[EMOTION:x] tag (happy/curious/surprised/playful/thoughtful/neutral)."
+        )
+        user_content = [
+            {"type": "text", "text": question.strip() or "What do you see right now?"},
+            {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64}"}},
+        ]
+        payload_messages = [
+            {"role": "system", "content": system},
+            {"role": "user", "content": user_content},
+        ]
+        last_error: Optional[str] = None
+        for ep in self.endpoints:
+            model = settings.VISION_MODEL or ep.model
+            payload = {"model": model, "messages": payload_messages,
+                       "temperature": settings.LLM_TEMPERATURE}
+            headers = {"Authorization": f"Bearer {ep.api_key}", **ep.extra_headers}
+            try:
+                resp = await self.http.post(ep.url, headers=headers, json=payload, timeout=60.0)
+            except Exception:
+                log_exception(log, f"Vision request to {ep.name} failed (network)")
+                last_error = f"{ep.name}: network"
+                continue
+            if resp.status_code != 200:
+                log.warning("Vision %s error %s: %s", ep.name, resp.status_code, resp.text[:300])
+                last_error = f"{ep.name}: {resp.status_code}"
+                continue
+            try:
+                text = resp.json()["choices"][0]["message"]["content"] or ""
+            except Exception:
+                log_exception(log, f"Vision {ep.name} response parse failed")
+                last_error = f"{ep.name}: parse"
+                continue
+            log.info("Vision ok via %s (%s): %d chars", ep.name, model, len(text))
+            return text.strip()
+        log.error("All vision endpoints failed. Last error: %s", last_error)
         return ""
 
     async def stream(self, messages: list[ChatMessage]) -> AsyncIterator[str]:

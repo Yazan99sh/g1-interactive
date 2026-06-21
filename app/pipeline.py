@@ -25,9 +25,11 @@ from app.logging_setup import get_logger, log_exception
 from app.memory import NullBrain
 from app.metrics import record_event
 from app.movement import MovementCommand, parse_movement
+from app.peek import PeekRequest, parse_peek_intent
 from app.state import Emotion, Language, Reply, Transcription, parse_emotion, _EMOTION_TAG
 from audio.sink import AudioSink
 from config import settings
+from robot.camera import NullCamera
 from robot.interfaces import ArmController
 from robot.led import LedIndicator
 from robot.locomotion import NullLocomotion
@@ -37,6 +39,12 @@ log = get_logger("app.pipeline")
 _FALLBACK = {
     Language.ENGLISH: "[EMOTION:thoughtful] Sorry, I didn't catch that — could you say it again?",
     Language.ARABIC: "[EMOTION:thoughtful] عفواً، ما فهمت عليك، ممكن تعيد؟",
+}
+
+# Spoken when a peek can't get a usable frame (camera unreachable / empty).
+_PEEK_FAIL = {
+    Language.ENGLISH: "Hmm, I couldn't get a clear look just now.",
+    Language.ARABIC: "للأسف ما قدرت أشوف بوضوح الحين.",
 }
 
 # A "sentence" = run of text up to and including a terminator (. ! ? … ؟) or newline.
@@ -86,6 +94,7 @@ class ConversationPipeline:
         locomotion=None,
         search: Optional[WebSearchClient] = None,
         brain=None,
+        camera=None,
     ) -> None:
         self.transcriber = transcriber
         self.llm = llm
@@ -104,6 +113,8 @@ class ConversationPipeline:
         self.search = search
         # Persistent file-based memory (session snapshots + optional long-term recall).
         self.brain = brain or NullBrain()
+        # Optional head camera for 'peek' (describe what it sees). NullCamera = no-op.
+        self.camera = camera or NullCamera()
 
     # ---- memory recall ----------------------------------------------------
     def _recall(self, text: str) -> str:
@@ -142,6 +153,25 @@ class ConversationPipeline:
                 lang = transcription.language or self.conversation.language
                 ack = await self._do_movement(mv, lang)
                 return TurnOutcome(had_speech=True, user_text=transcription.text, reply_text=ack)
+
+        # Peek: if the visitor asks the robot to LOOK at / SHOW them something, capture a
+        # head-camera frame and describe it out loud (only on the robot, with a camera).
+        if settings.PEEK_ENABLED and self.camera.enabled:
+            peek = parse_peek_intent(transcription.text)
+            if peek is not None:
+                lang = transcription.language or self.conversation.language
+                self.conversation.set_language(lang)
+                reply_text = await self._do_peek(peek, lang)
+                ms_total = (time.monotonic() - t0) * 1000
+                log.info("Turn done (peek) in %.0f ms", ms_total)
+                record_event(
+                    settings.LOG_DIR, user=transcription.text, reply=reply_text,
+                    lang=lang.value, emotion=Emotion.CURIOUS.value, from_kb=False,
+                    ms_total=int(ms_total),
+                    stt_audio_s=round(len(pcm) / (sample_rate * 2), 2) if sample_rate else 0.0,
+                    user_chars=len(transcription.text), reply_chars=len(reply_text),
+                )
+                return TurnOutcome(had_speech=True, user_text=transcription.text, reply_text=reply_text)
 
         # Web search: if the visitor asks to search or needs current info, announce it
         # and answer from live web results instead of the model's own knowledge.
@@ -205,6 +235,37 @@ class ConversationPipeline:
         finally:
             await self.locomotion.stop()
         return ack
+
+    # ---- peek (look + describe out loud) ----------------------------------
+    async def _do_peek(self, req: PeekRequest, language: Language) -> str:
+        """Announce "let me look", grab a head-camera frame, and describe it out loud.
+        The request + description go into history so the next turn can refer back to it.
+        Returns the spoken text."""
+        self.conversation.add_user(req.query)
+        announce = settings.PEEK_ANNOUNCE_AR if language is Language.ARABIC else settings.PEEK_ANNOUNCE_EN
+        self.led.set_state("thinking")
+        # Capture while we say "let me take a look", so the grab overlaps the announcement.
+        cap_task = asyncio.create_task(self.camera.capture())
+        await self.say(announce, language, emotion=Emotion.CURIOUS, gesture=True)
+        try:
+            jpeg = await cap_task
+        except Exception:
+            log_exception(log, "Camera capture task failed")
+            jpeg = None
+        if not jpeg:
+            msg = _PEEK_FAIL[language]
+            await self.respond(Reply(text=msg, emotion=Emotion.THOUGHTFUL, language=language))
+            self.conversation.add_assistant(msg)
+            return msg
+        raw = await self.llm.describe_image(jpeg, req.query, language)
+        if not raw.strip():
+            raw = _PEEK_FAIL[language]
+        emotion, clean = parse_emotion(raw)
+        self.conversation.add_assistant(clean)
+        log.info("Peek [%s]: %s", language.value, clean[:80])
+        await self.respond(Reply(text=clean, emotion=emotion or Emotion.HAPPY, language=language,
+                                 meta={"source": "peek"}))
+        return clean
 
     # ---- web search (optional, announced) ---------------------------------
     async def _maybe_web_search(self, transcription: Transcription) -> Optional[Reply]:

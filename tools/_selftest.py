@@ -65,7 +65,7 @@ check("convo msgs", msgs[0].role == "system" and "Arabic" in msgs[0].content and
 
 # 8. full module graph imports (no network calls)
 import ai.stt, ai.tts, ai.llm, ai.dialogflow, app.pipeline, app.controller  # noqa
-import app.movement, app.memory, robot.locomotion, audio.mic, audio.sink  # noqa
+import app.movement, app.memory, app.peek, robot.locomotion, robot.camera, audio.mic, audio.sink  # noqa
 check("imports", True)
 
 # 9. TTS chunk splitter (for faster first audio)
@@ -173,6 +173,20 @@ check("brain parse candidates", len(_parse_candidates('x [{"type":"team","subjec
 check("brain parse empty", _parse_candidates("nothing") == [])
 _nb = NullBrain()
 check("brain null noop", _nb.recall("x") == "" and _nb.snapshot_session([]) is None and _nb.enabled is False)
+
+# 16. peek intent (EN + AR look/show requests; no over-fire on see/look-it-up/web search)
+from app.peek import parse_peek_intent  # noqa: E402
+check("peek en look", parse_peek_intent("can you take a look at the table") is not None)
+check("peek en see", parse_peek_intent("what do you see") is not None)
+check("peek en show", parse_peek_intent("show me what's around you") is not None)
+check("peek ar shoof", parse_peek_intent("شوف شو في على الطاولة") is not None)
+check("peek ar tara", parse_peek_intent("ماذا ترى أمامك") is not None)
+check("peek no-fire isee", parse_peek_intent("I see what you mean, thanks") is None)
+check("peek no-fire lookup", parse_peek_intent("can you look it up online") is None)
+check("peek no-fire greet", parse_peek_intent("hello how are you today") is None)
+from robot.camera import NullCamera  # noqa: E402
+import asyncio as _a2  # noqa: E402
+check("camera null noop", _a2.run(NullCamera().capture()) is None and NullCamera().enabled is False)
 
 print("\nALL PASS" if ok else "\nSOME FAILED")
 sys.exit(0 if ok else 1)

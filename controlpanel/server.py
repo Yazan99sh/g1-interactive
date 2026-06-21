@@ -15,7 +15,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from . import cost, dialogflow, env_file, gestures, logtail, memory, movement, paths, search, speech
+from . import cost, dialogflow, env_file, gestures, logtail, memory, movement, paths, search, speech, vision
 from .process_manager import ProcessManager
 from .scripts import ScriptRunner, list_scripts, save_upload
 
@@ -376,6 +376,31 @@ def list_memory_sessions() -> dict:
 @app.get("/api/memory/session")
 def get_memory_session(id: str) -> dict:
     return memory.read_session(id)
+
+
+# ---- vision / peek (head-camera describe-out-loud toggle + live capture test) ----
+@app.get("/api/vision")
+async def get_vision() -> dict:
+    return vision.get_config()
+
+
+@app.post("/api/vision")
+async def set_vision(payload: dict = Body(...)) -> dict:
+    changed = vision.set_config(
+        camera_enabled=payload.get("camera_enabled"),
+        peek_enabled=payload.get("peek_enabled"),
+        snapshot_url=payload.get("snapshot_url"),
+        vision_model=payload.get("vision_model"),
+        announce_en=payload.get("announce_en"),
+        announce_ar=payload.get("announce_ar"),
+    )
+    return {"ok": True, "restart_required": bool(changed)}
+
+
+@app.post("/api/vision/test")
+def test_vision(payload: dict = Body(...)) -> dict:
+    # Sync def -> threadpool; the camera HTTP fetch must not block the event loop.
+    return vision.test_capture()
 
 
 # ---- scripts ----

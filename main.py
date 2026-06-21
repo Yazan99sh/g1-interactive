@@ -31,6 +31,7 @@ from audio.mic import HostMic, MicSource
 from audio.sink import AudioSink, HostSpeaker
 from audio.wake import WakeWordDetector
 from config import settings
+from robot.camera import NullCamera
 from robot.interfaces import ArmController, NullArmController
 from robot.led import LedIndicator
 from robot.locomotion import NullLocomotion
@@ -110,6 +111,18 @@ def build_brain(llm: LLMEngine):
         return NullBrain()
 
 
+def build_camera(http: httpx.AsyncClient):
+    """Head camera for 'peek' (HTTP JPEG from the Jetson helper). NullCamera unless
+    CAMERA_ENABLED + a snapshot URL. Not a DDS client — works from the dev PC too."""
+    if settings.CAMERA_ENABLED and settings.CAMERA_SNAPSHOT_URL:
+        try:
+            from robot.camera import G1Camera
+            return G1Camera(http, settings.CAMERA_SNAPSHOT_URL)
+        except Exception:
+            log_exception(log, "Camera unavailable — peek disabled")
+    return NullCamera()
+
+
 def build_wake_audio():
     """Offline wake detector (openWakeWord) if WAKE_ENGINE=openwakeword, else None
     (the controller then uses the STT wake matcher). Falls back to None on failure."""
@@ -156,9 +169,10 @@ async def amain() -> None:
         dialogflow = DialogflowClient()  # optional "first answer"; no-op unless enabled
         search = WebSearchClient(http)   # optional Brave web search; no-op without key
         brain = build_brain(llm)         # persistent memory (session snapshots + recall)
+        camera = build_camera(http)      # head camera for 'peek'; NullCamera unless enabled
         pipeline = ConversationPipeline(transcriber, llm, tts, kb, conversation, arm, sink,
                                         led=led, dialogflow=dialogflow, locomotion=locomotion,
-                                        search=search, brain=brain)
+                                        search=search, brain=brain, camera=camera)
         controller = Controller(
             mic=mic,
             transcriber=transcriber,
