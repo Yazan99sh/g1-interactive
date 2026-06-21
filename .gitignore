@@ -22,6 +22,9 @@ models/
 # Control panel runtime state
 controlpanel/state/
 
+# Robot brain — per-deployment memory (sessions, facts, logs). Never commit.
+brain/
+
 # OS / editor
 .DS_Store
 Thumbs.db
