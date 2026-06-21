@@ -92,3 +92,55 @@ research/community — verify license + maintenance before depending on them. Us
 | `unitreerobotics/dfx_inspire_service` | Inspire hand control over DDS |
 | `unitreerobotics/unitree_lerobot` | convert/train recorded episodes (optional) |
 | `dexsuite/dex-retargeting` | human→robot hand retargeting (a component, MIT) |
+
+---
+
+## 3. Robot memory ("a brain") — how it's built
+
+**Shipped (v1.1):** a file-based brain in `app/memory.py`, modelled on **OpenClaw** and
+the **Anthropic memory tool** — the design the owner asked for ("not one linear text
+file… bring only the part you need").
+
+Core principle (OpenClaw): **Markdown is the source of truth; the index is a derived,
+rebuildable shadow; the agent writes at session end; retrieval returns only the relevant
+slice.** We mirror it with the Anthropic-tool shape (an index → per-fact files):
+
+```
+brain/
+  MEMORY.md            # cheap index, read first: id | type | subject | salience | last_seen | expiry | tags | description
+  memories/<id>.md     # atomic fact: frontmatter (type/subject/salience/expiry/tags) + 1-3 sentence body
+  sessions/<id>.json   # per-session snapshot (the host "copy")
+  logs/YYYY-MM-DD.md   # human-readable daily log
+```
+
+* **Read** = parse the index, score `0.6·keyword-overlap + 0.25·salience + 0.15·recency`,
+  load only the top-k bodies → inject a compact "things you remember" block. No vector DB
+  (pure stdlib); the Markdown stays the rebuildable source so an embedding channel can be
+  blended into the score later.
+* **Write** = at session end the LLM extracts atomic candidate facts; an importance gate
+  drops low-salience ones; **type→TTL** makes ordinary visitors expire while **teams &
+  supervisors persist** (`expiry: never`); ADD vs UPDATE (bump `last_seen`/merge) avoids
+  dupes.
+* **Forget** = boot-time sweep deletes expired files; "forget visitors" button for now.
+
+Heavier alternatives considered and **rejected** for this small self-hosted robot:
+**Zep/Graphiti** (temporal knowledge graph, needs Neo4j), **Letta/MemGPT** (a whole agent
+runtime), **mem0** (good, but needs a vector store/infra). They're overkill for "remember
+a few teams + supervisors"; we borrowed mem0's typed ADD/UPDATE idea and the Generative-
+Agents recency-decay idea without the infrastructure. Sources: docs.openclaw.ai/concepts/memory,
+the Anthropic memory tool docs, mem0ai/mem0, zilliztech/memsearch.
+
+---
+
+## 4. G1 head camera (for "peek")
+
+**Finding:** the **G1 has no `VideoClient`/DDS video service** — that interface is **Go2
+only** (Unitree "Multimedia Services" doc). The G1 head camera is an **Intel RealSense on
+the Jetson (PC2)** over USB, so it cannot be read over DDS from our host.
+
+**Shipped (v1.1):** a ~30-line helper (`tools/jetson_camera_server.py`) runs **on the
+Jetson** — `pyrealsense2` (or a V4L2/OpenCV fallback) grabs one color frame, `cv2.imencode`
+to JPEG, served at `GET :8090/snapshot`. The voice app fetches that URL (`robot/camera.py`)
+and passes the JPEG to a vision model (`ai/llm.py:describe_image`). This mirrors the
+accepted fix in `unitree_sdk2_python` issue #106 and LeRobot's G1 image server. Run the
+helper on PC1 instead if your batch wired the RealSense there.

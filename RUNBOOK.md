@@ -116,6 +116,31 @@ python -m controlpanel            # -> http://<host>:8800
 
 See `CONTROL_PANEL.md`.
 
+### Head camera for "peek" (optional)
+
+"Peek" (look at something + describe it out loud) needs a frame from the G1 head
+camera. The G1 has **no DDS video service** (that was Go2-only) — the head RealSense
+is on the **Jetson (PC2, `192.168.123.164`)** over USB. Run a tiny helper there that
+serves one JPEG over HTTP, then point the app at it:
+
+```bash
+ssh unitree@192.168.123.164          # password: 123
+rs-enumerate-devices                 # confirm the RealSense is seen (or: lsusb | grep -i Intel)
+pip install pyrealsense2 opencv-python
+python3 jetson_camera_server.py      # serves http://0.0.0.0:8090/snapshot
+```
+
+On the voice-app host, set (Vision tab or `.env`): `CAMERA_ENABLED=true`,
+`CAMERA_SNAPSHOT_URL=http://192.168.123.164:8090/snapshot`. Test from the panel's
+**Vision** tab ("Capture test frame") or `curl http://192.168.123.164:8090/snapshot`.
+If your batch wired the RealSense to PC1 (`192.168.123.161`), run the helper there.
+
+### Memory (optional)
+
+Session snapshots are on by default → `brain/sessions` + `brain/logs` (browse in the
+panel's **Memory** tab). For memory **across** sessions, set `LONG_TERM_MEMORY_ENABLED=true`;
+teams/supervisors persist, visitors expire (`MEMORY_VISITOR_TTL_DAYS`).
+
 ---
 
 ## 5. Logs
@@ -141,6 +166,9 @@ See `CONTROL_PANEL.md`.
 | Robot triggers itself / echoes | speaker feeding the mic | mic is flushed between turns; move USB mic away from speaker; lower volume |
 | ElevenLabs 401/403 on PCM | plan can't output PCM | use a Creator+ key, or set `TTS_OUTPUT_FORMAT=mp3_44100_128` + `pip install miniaudio` |
 | Wake word never triggers | mic too quiet / phrase mismatch | lower `SILENCE_RMS_THRESHOLD`; add phrases to `WAKE_WORDS` |
+| "Peek" says "I couldn't get a clear look" | Jetson helper down / wrong URL / camera on PC1 | start `jetson_camera_server.py` on the Jetson; check `CAMERA_SNAPSHOT_URL`; `curl` it; run the helper on PC1 if that's where the RealSense is |
+| Robot ignores short/garbled phrases | noise filter (by design) | it treats noise/too-short speech as silence; lower `NOISE_MIN_CHARS` or trim `NOISE_BLOCKLIST` if it's too aggressive |
+| Robot "forgets" people every restart | long-term memory off (default) | set `LONG_TERM_MEMORY_ENABLED=true`; only teams/supervisors persist — visitors expire by design |
 
 ---
 

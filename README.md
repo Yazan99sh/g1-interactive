@@ -44,7 +44,23 @@ Reply text starts with an `[EMOTION:happy]`-style tag (stripped before speaking)
 that selects the arm gesture + LED colour — same trick as `super-star`.
 
 **Idle rule:** after `IDLE_AFTER_SILENT_TURNS` (default **10**) consecutive silent
-listening turns, the robot drops back to standby until the next "Hi Robot".
+listening turns — or when the visitor **says "go idle / that's all / نام"** — the robot
+drops back to standby until the next "Hi Robot". Ambient **noise and ASR hallucinations
+are ignored** (treated as silence) so it never "answers nothing", and it says a short
+line when a conversation lapses into silence.
+
+## What it remembers, sees, and ignores (1.1)
+
+- **Memory (a brain).** Every finished session is saved to the host (`brain/sessions`,
+  `brain/logs`). With **long-term memory** on (`LONG_TERM_MEMORY_ENABLED`, off by default),
+  the robot keeps a few durable facts across sessions — **teams & supervisors persist;
+  ordinary visitors expire** — stored as atomic Markdown files behind a cheap `MEMORY.md`
+  index, so only the relevant slice is recalled into context (token-efficient). Manage it
+  in the panel's **Memory** tab.
+- **Peek (vision).** Ask it to *"look at / show me / what do you see"* and it grabs one
+  head-camera frame and **describes it out loud** (no photos saved). Off by default; needs
+  the on-Jetson helper (`tools/jetson_camera_server.py`) and `CAMERA_ENABLED`. Panel
+  **Vision** tab.
 
 ## Layout
 
@@ -60,16 +76,23 @@ g1-interactive/
     conversation.py       history + persona/system-prompt builder (bilingual)
     pipeline.py           one turn: Transcribe → Think → Respond(+gesture)
     controller.py         master state machine: Standby ↔ Converse, idle-after-10
+    memory.py             the brain: session snapshots + long-term recall (Brain/NullBrain)
+    peek.py               "look at / show me / what do you see" intent parser (EN + AR)
+    intents.py            idle/sleep-command + noise/ASR-hallucination filters (EN + AR)
   ai/
     stt.py                STT — OpenAI gpt-4o-transcribe or Groq Whisper (STT_BACKEND)
     tts.py                ElevenLabs flash v2.5 (raw PCM output)
-    llm.py                OpenRouter (primary) → OpenAI (fallback)
+    llm.py                OpenRouter (primary) → OpenAI (fallback) + describe_image (vision)
     dialogflow.py         optional Dialogflow CX "answer-first" stage (LLM fallback)
     knowledge_base.py     loads knowledge/*.md, RAG + verbatim FAQ
   app/
     movement.py           experimental voice movement-command parser (EN + AR)
   robot/
     locomotion.py         experimental G1 LocoClient walk wrapper (off by default)
+    camera.py             head-camera JPEG fetch for "peek" (G1Camera/NullCamera)
+  tools/
+    jetson_camera_server.py  RUN ON THE JETSON: serves one head-camera JPEG over HTTP
+  brain/                  per-deployment memory (sessions, fact files, logs) — gitignored
   audio/
     mic.py                host mic capture (sounddevice) + utterance recorder
     vad.py                RMS voice-activity segmenter

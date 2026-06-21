@@ -2,6 +2,51 @@
 
 All notable changes to the G1 Interactive Voice Pipeline.
 
+## [1.1.0] — 2026-06-21 — Memory brain, peek (vision), idle command, noise robustness
+
+Developed on the `remember-me` branch (off `stable-v1.0.0`).
+
+### Added — a persistent, file-based "brain" (memory)
+- The robot now has memory that survives restarts, modelled on OpenClaw / the Anthropic
+  memory tool: **Markdown is the source of truth, a cheap `MEMORY.md` index is read first,
+  and only the relevant atomic fact files are loaded per turn** (token-efficient — it
+  brings just the slice it needs, not one giant blob). New `app/memory.py` (`Brain` +
+  `NullBrain`); store under `brain/` (gitignored).
+- **Session snapshots** (`MEMORY_SESSION_SNAPSHOTS`, on): every finished conversation is
+  written to `brain/sessions/*.json` + `brain/logs/<date>.md` on the host — a browsable copy.
+- **Long-term memory** (`LONG_TERM_MEMORY_ENABLED`, off by default): at session end an LLM
+  extracts a few durable, mission-useful facts. **Teams & supervisors persist forever;
+  ordinary visitors expire** after `MEMORY_VISITOR_TTL_DAYS`. Relevant memories are recalled
+  (keyword/description overlap + salience + recency) and injected on each turn. Boot-time
+  sweep forgets the expired.
+- Panel **🧠 Memory** tab: toggles + retention, a memory browser (edit/delete), a session-
+  snapshot viewer, stats, and "forget all visitors now".
+
+### Added — "peek": look at something and describe it out loud
+- On "look at / show me / what do you see" (EN+AR) the robot says "let me take a look",
+  grabs **one head-camera frame**, and **describes what it sees out loud** — the description
+  lives only in the conversation (no photos saved). Off by default (`CAMERA_ENABLED`/`PEEK_ENABLED`).
+- The G1 has **no DDS video service** (that was Go2-only): the head RealSense is on the
+  Jetson. New `tools/jetson_camera_server.py` runs **on the Jetson (PC2)** and serves one
+  JPEG over HTTP; `robot/camera.py` (`G1Camera`/`NullCamera`) fetches it; `ai/llm.py`
+  `describe_image()` answers via a vision model (`VISION_MODEL`, default the LLM's own
+  gpt-4o-mini). Panel **👁️ Vision** tab with a live capture test.
+
+### Added — "idle" command + noise/empty-speech robustness
+- Saying "go idle / idle state / that's all / goodbye / نام / وضع الخمول" makes the robot
+  acknowledge and drop straight back to STANDBY (waits for the wake word). New
+  `app/intents.py:parse_sleep_intent`.
+- The robot no longer "answers nothing": ambient **noise & ASR hallucinations** ("you",
+  "thanks for watching", "شكرا", punctuation-only, too-short) are treated as silence
+  (`looks_like_noise`), so a conversation actually ends when nobody is talking. It says one
+  short end-of-conversation line (`CONVERSATION_END_ANNOUNCE`) before idling. Panel Speech
+  tab gains a "Listening hygiene" card.
+
+### Notes
+- New deps for these features are optional: long-term memory uses the existing LLM;
+  peek needs a vision-capable model (default already is) + the Jetson helper
+  (`pip install pyrealsense2 opencv-python` on the Jetson). `brain/` and `.env` stay gitignored.
+
 ## [1.0.0] — 2026-06-21 — First stable release
 
 First tagged stable release. Consolidates the 0.2.x–0.3.x feature set into a known-good
