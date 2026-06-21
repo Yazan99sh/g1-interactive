@@ -15,7 +15,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from . import cost, dialogflow, env_file, gestures, logtail, movement, paths, search, speech
+from . import cost, dialogflow, env_file, gestures, logtail, memory, movement, paths, search, speech
 from .process_manager import ProcessManager
 from .scripts import ScriptRunner, list_scripts, save_upload
 
@@ -322,6 +322,60 @@ async def set_search(payload: dict = Body(...)) -> dict:
 def test_search(payload: dict = Body(...)) -> dict:
     # Sync def -> threadpool; the Brave HTTP call must not block the event loop.
     return search.test_query(payload.get("query", ""))
+
+
+# ---- robot brain / memory (snapshots + optional long-term, with a file browser) ----
+@app.get("/api/memory")
+def get_memory() -> dict:
+    # Sync def -> threadpool; reads the brain files (parse + stats) off the event loop.
+    return memory.get_config()
+
+
+@app.post("/api/memory")
+async def set_memory(payload: dict = Body(...)) -> dict:
+    changed = memory.set_config(
+        long_term=payload.get("long_term"),
+        session_snapshots=payload.get("session_snapshots"),
+        visitor_ttl_days=payload.get("visitor_ttl_days"),
+        fact_ttl_days=payload.get("fact_ttl_days"),
+        recall_k=payload.get("recall_k"),
+    )
+    return {"ok": True, "restart_required": bool(changed)}
+
+
+@app.get("/api/memory/list")
+def list_memory() -> dict:
+    return memory.list_memories()
+
+
+@app.get("/api/memory/item")
+def get_memory_item(id: str) -> dict:
+    return memory.read_memory(id)
+
+
+@app.post("/api/memory/item")
+def save_memory_item(payload: dict = Body(...)) -> dict:
+    return memory.write_memory(payload.get("id", ""), payload.get("content", ""))
+
+
+@app.post("/api/memory/delete")
+def delete_memory_item(payload: dict = Body(...)) -> dict:
+    return memory.delete_memory(payload.get("id", ""))
+
+
+@app.post("/api/memory/forget-visitors")
+def forget_visitors() -> dict:
+    return memory.forget_visitors()
+
+
+@app.get("/api/memory/sessions")
+def list_memory_sessions() -> dict:
+    return memory.list_sessions()
+
+
+@app.get("/api/memory/session")
+def get_memory_session(id: str) -> dict:
+    return memory.read_session(id)
 
 
 # ---- scripts ----

@@ -19,6 +19,7 @@ whether it runs as a **systemd service** or as a **panel-managed subprocess**
 | **Speech** | Pick the **STT engine** (OpenAI / Groq Whisper), toggle streaming + chunked speech and set the piece size — controls how fast the robot listens + starts talking |
 | **Dialogflow** | Turn **Dialogflow CX answer-first** on/off (LLM fallback), set the agent (project/location/agent id/key) + confidence, and **live-test** the agent from a query box |
 | **Web Search** | Turn **Brave web search** on/off, set how many results to use + the spoken "let me search" announcement (EN/AR), and **live-test** a query |
+| **Memory** | The robot's **brain**: toggle per-session host snapshots + **long-term memory** (teams/supervisors persist, visitors expire), set retention + recall depth, browse/edit/delete saved memories, view session snapshots, and **forget all visitors** now |
 | **Environment** | Edit `.env` — API keys (masked), **ElevenLabs voice id**, head-LED colours, and every tunable, grouped by section |
 | **Scripts** | Run the diagnostic/action scripts in `tools/` and `scripts/` with live output; upload new `.py` scripts |
 

@@ -216,6 +216,65 @@ tabInit.search = async () => {
   $("wsTestOut").textContent = "";
 };
 
+// ---- memory (the robot's brain) ----
+let memCurrent = null;
+function renderMemStats(s) {
+  if (!s) { $("memStats").textContent = "—"; return; }
+  const types = Object.entries(s.by_type || {}).map(([k, v]) => `${v} ${k}`).join(", ") || "none";
+  $("memStats").textContent =
+    `${s.total} memories (${types}) · ${s.expiring_soon} expiring soon · ${s.sessions} session snapshots`;
+}
+async function loadMemList() {
+  const data = await api("/api/memory/list");
+  $("memList").innerHTML = (data.memories || []).map((m) =>
+    `<li data-id="${m.id}"><div>${escapeHtml(m.subject || m.id)} <span class="chip">${m.type}</span></div>` +
+    `<div class="fmeta">sal ${Number(m.salience).toFixed(2)} · exp ${m.expiry}</div></li>`).join("")
+    || '<li class="muted">no memories yet</li>';
+  document.querySelectorAll("#memList li[data-id]").forEach((li) =>
+    li.onclick = () => openMem(li.dataset.id));
+}
+async function openMem(id) {
+  const data = await api("/api/memory/item?id=" + encodeURIComponent(id));
+  if (!data.ok) { toast(data.detail || "could not open", true); return; }
+  memCurrent = id;
+  $("memName").textContent = id;
+  $("memContent").value = data.content;
+  $("btnMemSave").disabled = false; $("btnMemDelete").disabled = false;
+  document.querySelectorAll("#memList li").forEach((li) => li.classList.toggle("active", li.dataset.id === id));
+}
+async function loadSessionList() {
+  const data = await api("/api/memory/sessions");
+  $("memSessionList").innerHTML = (data.sessions || []).map((s) =>
+    `<li data-id="${s.id}"><div>${s.id}</div><div class="fmeta">${s.turn_count} turns · ${(s.ended_at || "").replace("T", " ")}</div></li>`).join("")
+    || '<li class="muted">no sessions yet</li>';
+  document.querySelectorAll("#memSessionList li[data-id]").forEach((li) =>
+    li.onclick = () => openSession(li.dataset.id));
+}
+async function openSession(id) {
+  const data = await api("/api/memory/session?id=" + encodeURIComponent(id));
+  $("memSessionName").textContent = id;
+  if (!data.ok) { $("memSessionView").textContent = "✗ " + (data.detail || "failed"); return; }
+  const t = (data.session.transcript || []).map((x) =>
+    `${x.role === "user" ? "Visitor" : "Robot"}: ${x.content}`).join("\n");
+  $("memSessionView").textContent = t || "(empty)";
+  document.querySelectorAll("#memSessionList li").forEach((li) => li.classList.toggle("active", li.dataset.id === id));
+}
+tabInit.memory = async () => {
+  const c = await api("/api/memory");
+  $("memLongTerm").checked = !!c.long_term_enabled;
+  $("memSnapshots").checked = !!c.session_snapshots;
+  $("memVisitorTtl").value = c.visitor_ttl_days;
+  $("memFactTtl").value = c.fact_ttl_days;
+  $("memRecallK").value = c.recall_k;
+  renderMemStats(c.stats);
+  memCurrent = null;
+  $("memName").textContent = "Select a memory…"; $("memContent").value = "";
+  $("btnMemSave").disabled = true; $("btnMemDelete").disabled = true;
+  $("memSessionName").textContent = "Select a session…"; $("memSessionView").textContent = "";
+  await loadMemList();
+  await loadSessionList();
+};
+
 // ---- environment ----
 const VOICE_KEYS = ["ELEVENLABS_VOICE_ID", "ELEVENLABS_ARABIC_VOICE_ID"];
 tabInit.environment = async () => {
@@ -393,6 +452,36 @@ function wire() {
       const lines = (r.results || []).map((x, i) => `${i + 1}. ${x.title}\n   ${x.description}`).join("\n\n");
       $("wsTestOut").textContent = `✓ ${r.count} result(s) (${r.lang})\n\n${lines || "(none)"}`;
     } catch (e) { $("wsTestOut").textContent = "✗ " + e.message; }
+  };
+
+  $("btnMemorySave").onclick = async () => {
+    const body = {
+      long_term: $("memLongTerm").checked,
+      session_snapshots: $("memSnapshots").checked,
+      visitor_ttl_days: parseInt($("memVisitorTtl").value, 10),
+      fact_ttl_days: parseInt($("memFactTtl").value, 10),
+      recall_k: parseInt($("memRecallK").value, 10),
+    };
+    try { const r = await api("/api/memory", { method: "POST", body }); toast("Memory settings saved"); if (r.restart_required) showRestart(); }
+    catch (e) { toast("Save failed: " + e.message, true); }
+  };
+  $("btnForgetVisitors").onclick = async () => {
+    if (!confirm("Forget ALL visitor memories now? (teams & supervisors are kept)")) return;
+    try { const r = await api("/api/memory/forget-visitors", { method: "POST" }); toast("Forgot " + (r.removed || 0) + " visitor(s)"); tabInit.memory(); }
+    catch (e) { toast("Failed: " + e.message, true); }
+  };
+  $("btnMemSave").onclick = async () => {
+    if (!memCurrent) return;
+    try { const r = await api("/api/memory/item", { method: "POST", body: { id: memCurrent, content: $("memContent").value } });
+      if (!r.ok) { toast(r.detail || "save failed", true); return; } toast("Saved " + memCurrent); loadMemList(); }
+    catch (e) { toast("Save failed: " + e.message, true); }
+  };
+  $("btnMemDelete").onclick = async () => {
+    if (!memCurrent || !confirm("Delete memory " + memCurrent + "?")) return;
+    try { await api("/api/memory/delete", { method: "POST", body: { id: memCurrent } });
+      memCurrent = null; $("memContent").value = ""; $("memName").textContent = "Select a memory…";
+      $("btnMemSave").disabled = true; $("btnMemDelete").disabled = true; loadMemList(); }
+    catch (e) { toast("Delete failed: " + e.message, true); }
   };
 
   $("btnEnvSave").onclick = saveEnv;

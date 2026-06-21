@@ -40,6 +40,7 @@
       <button class="navItem" data-tab="speech">⚡ Speech</button>
       <button class="navItem" data-tab="dialogflow">🟢 Dialogflow</button>
       <button class="navItem" data-tab="search">🔎 Web Search</button>
+      <button class="navItem" data-tab="memory">🧠 Memory</button>
       <button class="navItem" data-tab="environment">🔑 Environment</button>
       <button class="navItem" data-tab="scripts">⚙️ Scripts</button>
     </nav>
@@ -216,6 +217,49 @@
           <pre id="wsTestOut" class="console"></pre>
         </div>
         <p class="muted">Needs <code>BRAVE_SEARCH_API_KEY</code> (Environment tab). Takes effect on restart.</p>
+      </section>
+
+      <!-- Memory -->
+      <section class="tab" id="tab-memory">
+        <h2>Memory <span class="muted">the robot's brain — session copies + long-term facts</span></h2>
+        <div class="card">
+          <label class="toggle"><input type="checkbox" id="memSnapshots"> Save a copy of every session to the host</label>
+          <p class="muted">After each conversation ends, a transcript is written to <code>brain/sessions</code> + <code>brain/logs</code> on this machine. Browse them below.</p>
+          <label class="toggle"><input type="checkbox" id="memLongTerm"> Long-term memory across sessions (experimental)</label>
+          <p class="muted">At session end the robot decides what's worth keeping. <b>Teams &amp; supervisors persist; ordinary visitors' details expire</b> after the retention window. Relevant memories are recalled on each turn.</p>
+          <div class="envField"><label for="memVisitorTtl">Forget a visitor after (days)</label><input id="memVisitorTtl" type="number" min="0" max="365" step="1"></div>
+          <div class="envField"><label for="memFactTtl">Forget other facts after (days, 0 = keep)</label><input id="memFactTtl" type="number" min="0" max="3650" step="1"></div>
+          <div class="envField"><label for="memRecallK">Memories to recall per turn (1–10)</label><input id="memRecallK" type="number" min="1" max="10" step="1"></div>
+          <button id="btnMemorySave" class="btn">Save memory settings</button>
+        </div>
+        <div class="card">
+          <div class="card-label">Brain contents</div>
+          <p class="muted" id="memStats">—</p>
+          <button id="btnForgetVisitors" class="btn btn-tiny btn-stop">Forget all visitors now</button>
+        </div>
+        <h2 style="margin-top:24px">Saved memories</h2>
+        <div class="split">
+          <div class="sidelist">
+            <ul id="memList"></ul>
+          </div>
+          <div class="editor">
+            <div class="editor-head"><span id="memName" class="muted">Select a memory…</span>
+              <span><button id="btnMemSave" class="btn btn-tiny" disabled>Save</button>
+              <button id="btnMemDelete" class="btn btn-tiny btn-stop" disabled>Delete</button></span>
+            </div>
+            <textarea id="memContent" spellcheck="false" placeholder="A memory file (frontmatter + a short fact). Editing it updates the brain index."></textarea>
+          </div>
+        </div>
+        <h2 style="margin-top:24px">Session snapshots</h2>
+        <div class="split">
+          <div class="sidelist">
+            <ul id="memSessionList"></ul>
+          </div>
+          <div class="editor">
+            <div class="editor-head"><span id="memSessionName" class="muted">Select a session…</span></div>
+            <pre id="memSessionView" class="console"></pre>
+          </div>
+        </div>
       </section>
 
       <!-- Environment -->
