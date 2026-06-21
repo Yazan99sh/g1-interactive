@@ -247,6 +247,26 @@ class Settings:
     WEB_SEARCH_ANNOUNCE_EN: str = field(default_factory=lambda: _get("WEB_SEARCH_ANNOUNCE_EN", "Sure, let me look that up online."))
     WEB_SEARCH_ANNOUNCE_AR: str = field(default_factory=lambda: _get("WEB_SEARCH_ANNOUNCE_AR", "حسنًا، لحظة، خليني أبحث في الإنترنت."))
 
+    # ---- Robot brain / memory ----
+    # Every finished session is snapshotted to brain/sessions + brain/logs on the host
+    # (a "copy on the PC") whenever this is on — works even with long-term memory off.
+    MEMORY_SESSION_SNAPSHOTS: bool = field(default_factory=lambda: _get_bool("MEMORY_SESSION_SNAPSHOTS", True))
+    # Long-term memory ACROSS sessions (default OFF). When on, at the end of a session an
+    # LLM extracts a few durable, mission-useful facts; teams & supervisors persist, but
+    # ordinary visitors' details expire after MEMORY_VISITOR_TTL_DAYS. Relevant memories
+    # are recalled and injected on each turn. Toggle from the panel's Memory tab.
+    LONG_TERM_MEMORY_ENABLED: bool = field(default_factory=lambda: _get_bool("LONG_TERM_MEMORY_ENABLED", False))
+    # Where the brain lives (atomic fact files + index + session snapshots). Gitignored.
+    BRAIN_DIR: str = field(default_factory=lambda: _get("BRAIN_DIR", "brain"))
+    # How long an ordinary visitor (type "person") is remembered before being swept.
+    MEMORY_VISITOR_TTL_DAYS: int = field(default_factory=lambda: _get_int("MEMORY_VISITOR_TTL_DAYS", 7))
+    # TTL for other durable facts (place/task/fact/preference); teams/supervisors never expire.
+    MEMORY_FACT_TTL_DAYS: int = field(default_factory=lambda: _get_int("MEMORY_FACT_TTL_DAYS", 90))
+    # Importance gate: drop extracted memories below this salience (unless team/supervisor).
+    MEMORY_SALIENCE_FLOOR: float = field(default_factory=lambda: _get_float("MEMORY_SALIENCE_FLOOR", 0.25))
+    # How many memories to inject per turn (top-k by relevance + salience + recency).
+    MEMORY_RECALL_K: int = field(default_factory=lambda: _get_int("MEMORY_RECALL_K", 3))
+
     # ---- Knowledge base ----
     KB_STRICT: bool = field(default_factory=lambda: _get_bool("KB_STRICT", False))
 
@@ -258,6 +278,12 @@ class Settings:
     LOG_DIR: Path = BASE_DIR / "logs"
     KNOWLEDGE_DIR: Path = BASE_DIR / "knowledge"
     PROMPTS_DIR: Path = BASE_DIR / "prompts"
+
+    @property
+    def brain_path(self) -> Path:
+        """Absolute brain dir (BRAIN_DIR may be relative to the project root)."""
+        p = Path(self.BRAIN_DIR).expanduser()
+        return p if p.is_absolute() else (self.BASE_DIR / p)
 
     def redacted(self) -> dict:
         """A dict of settings safe to log (keys masked)."""
@@ -282,6 +308,8 @@ class Settings:
             "TTS_CHUNKING_ENABLED": self.TTS_CHUNKING_ENABLED,
             "DIALOGFLOW_ENABLED": self.DIALOGFLOW_ENABLED,
             "DIALOGFLOW_AGENT": f"{self.DIALOGFLOW_PROJECT}/{self.DIALOGFLOW_LOCATION}/{self.DIALOGFLOW_AGENT_ID}" if self.DIALOGFLOW_ENABLED else "off",
+            "MEMORY_SESSION_SNAPSHOTS": self.MEMORY_SESSION_SNAPSHOTS,
+            "LONG_TERM_MEMORY_ENABLED": self.LONG_TERM_MEMORY_ENABLED,
             "SAMPLE_RATE": self.SAMPLE_RATE,
             "MIC_SOURCE": self.MIC_SOURCE,
             "AUDIO_SINK": self.AUDIO_SINK,

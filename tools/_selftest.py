@@ -65,7 +65,7 @@ check("convo msgs", msgs[0].role == "system" and "Arabic" in msgs[0].content and
 
 # 8. full module graph imports (no network calls)
 import ai.stt, ai.tts, ai.llm, ai.dialogflow, app.pipeline, app.controller  # noqa
-import app.movement, robot.locomotion, audio.mic, audio.sink  # noqa
+import app.movement, app.memory, robot.locomotion, audio.mic, audio.sink  # noqa
 check("imports", True)
 
 # 9. TTS chunk splitter (for faster first audio)
@@ -139,6 +139,40 @@ check("ws ar explicit", search_query("ابحث عن آخر الأخبار") is n
 check("ws no-fire kb", search_query("what is the national infrastructure fund") is None)
 check("ws no-fire greet", search_query("hello how are you") is None)
 check("ws no-fire ar", search_query("ما هو صندوق البنية التحتية الوطني") is None)
+
+# 15. brain: write/recall/expiry/forget + index round-trip + NullBrain no-op
+import tempfile, datetime  # noqa: E402
+from app.memory import Brain, NullBrain, _parse_candidates  # noqa: E402
+from app.state import ChatMessage as _CM  # noqa: E402
+_bdir = Path(tempfile.mkdtemp()) / "brain"
+_b = Brain(_bdir)
+_today = datetime.datetime.now().date()
+_sup = _b._normalise({"type": "supervisor", "subject": "Yazan",
+                      "content": "Yazan is the supervisor; prefers concise replies.",
+                      "salience": 0.9, "tags": ["operator"]}, _today)
+_vis = _b._normalise({"type": "person", "subject": "Ahmed",
+                      "content": "Ahmed asked about backflips.", "salience": 0.3, "tags": []}, _today)
+check("brain ttl permanent", _sup is not None and _sup.expiry == "never")
+check("brain ttl visitor", _vis is not None and _vis.expiry != "never")
+check("brain salience gate", _b._normalise({"type": "fact", "subject": "x", "content": "trivial",
+                                            "salience": 0.05, "tags": []}, _today) is None)
+for _r in (_sup, _vis):
+    _b._atomic_write(_b._record_path(_r.id), _b._serialise(_r))
+_b._rebuild_index([_sup, _vis])
+check("brain recall hit", "Yazan" in _b.recall("tell me about Yazan"))
+check("brain permanent floor", "Yazan" in _b.recall("what is the weather"))  # supervisor stays visible
+_rt = _b._parse_file(_b._record_path(_sup.id).read_text(encoding="utf-8"))
+check("brain file round-trip", _rt is not None and _rt.subject == "Yazan" and _rt.type == "supervisor")
+_vis.expiry = (_today - datetime.timedelta(days=1)).isoformat()
+_b._atomic_write(_b._record_path(_vis.id), _b._serialise(_vis))
+check("brain sweep expires visitor", _b.sweep_expired() == 1 and not _b._record_path(_vis.id).exists())
+check("brain sweep keeps supervisor", _b._record_path(_sup.id).exists())
+check("brain snapshot", (lambda p: bool(p and p.exists()))(
+    _b.snapshot_session([_CM("user", "hi"), _CM("assistant", "hello")])))
+check("brain parse candidates", len(_parse_candidates('x [{"type":"team","subject":"F","content":"c","salience":0.9}] y')) == 1)
+check("brain parse empty", _parse_candidates("nothing") == [])
+_nb = NullBrain()
+check("brain null noop", _nb.recall("x") == "" and _nb.snapshot_session([]) is None and _nb.enabled is False)
 
 print("\nALL PASS" if ok else "\nSOME FAILED")
 sys.exit(0 if ok else 1)

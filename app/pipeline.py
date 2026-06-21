@@ -22,6 +22,7 @@ from ai.text_chunk import split_for_tts
 from ai.tts import ElevenLabsTTS
 from app.conversation import ConversationManager
 from app.logging_setup import get_logger, log_exception
+from app.memory import NullBrain
 from app.metrics import record_event
 from app.movement import MovementCommand, parse_movement
 from app.state import Emotion, Language, Reply, Transcription, parse_emotion, _EMOTION_TAG
@@ -84,6 +85,7 @@ class ConversationPipeline:
         dialogflow: Optional[DialogflowClient] = None,
         locomotion=None,
         search: Optional[WebSearchClient] = None,
+        brain=None,
     ) -> None:
         self.transcriber = transcriber
         self.llm = llm
@@ -100,6 +102,19 @@ class ConversationPipeline:
         self.locomotion = locomotion or NullLocomotion()
         # Optional Brave web search (None = never search).
         self.search = search
+        # Persistent file-based memory (session snapshots + optional long-term recall).
+        self.brain = brain or NullBrain()
+
+    # ---- memory recall ----------------------------------------------------
+    def _recall(self, text: str) -> str:
+        """Compact 'things you remember' block for this turn, or "" (long-term off / nothing)."""
+        if not (settings.LONG_TERM_MEMORY_ENABLED and self.brain.enabled):
+            return ""
+        try:
+            return self.brain.recall(text)
+        except Exception:
+            log_exception(log, "Memory recall failed")
+            return ""
 
     # ---- listening result -> spoken reply ---------------------------------
     async def handle_audio(self, pcm: bytes, sample_rate: int) -> TurnOutcome:
@@ -224,7 +239,8 @@ class ConversationPipeline:
         else:
             kb_context = ("(The web search returned no results — tell the visitor briefly "
                           "that you couldn't find anything online about that.)")
-        messages = self.conversation.build_messages(transcription.text, kb_context)
+        messages = self.conversation.build_messages(
+            transcription.text, kb_context, self._recall(transcription.text))
         raw = await self.llm.complete(messages)
         if not raw.strip():
             raw = _FALLBACK[lang]
@@ -273,7 +289,8 @@ class ConversationPipeline:
                              language=faq_lang or lang, from_knowledge_base=True)
 
         kb_context = self.kb.context_for(transcription.text)
-        messages = self.conversation.build_messages(transcription.text, kb_context)
+        messages = self.conversation.build_messages(
+            transcription.text, kb_context, self._recall(transcription.text))
         raw = await self.llm.complete(messages)
         if not raw.strip():
             raw = _FALLBACK[lang]
@@ -380,7 +397,8 @@ class ConversationPipeline:
                 return reply
 
         kb_context = self.kb.context_for(transcription.text)
-        messages = self.conversation.build_messages(transcription.text, kb_context)
+        messages = self.conversation.build_messages(
+            transcription.text, kb_context, self._recall(transcription.text))
 
         spoken, emotion = await self._stream_speak(messages, lang)
         text = " ".join(spoken).strip()

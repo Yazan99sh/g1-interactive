@@ -105,15 +105,20 @@ class ConversationManager:
         if len(self.history) > limit:
             self.history = self.history[-limit:]
 
-    def _system_prompt(self, kb_context: str) -> str:
+    def _system_prompt(self, kb_context: str, memory_context: str = "") -> str:
         lang_line = (
             "\nThe user is currently speaking ARABIC — reply in Arabic."
             if self.language is Language.ARABIC
             else "\nThe user is currently speaking ENGLISH — reply in English."
         )
+        # Long-term memory the robot recalled (people/teams it has met). Placed before
+        # the knowledge base so persona > memory > KB in the system message.
+        mem_block = f"\n\n{memory_context}" if memory_context else ""
         kb_block = f"\n\nKNOWLEDGE (use if relevant):\n{kb_context}" if kb_context else ""
-        return self.persona + lang_line + kb_block
+        return self.persona + lang_line + mem_block + kb_block
 
-    def build_messages(self, user_text: str, kb_context: str = "") -> list[ChatMessage]:
+    def build_messages(self, user_text: str, kb_context: str = "",
+                       memory_context: str = "") -> list[ChatMessage]:
         """System prompt + recent history + this user turn (history already updated)."""
-        return [ChatMessage(role="system", content=self._system_prompt(kb_context)), *self.history]
+        return [ChatMessage(role="system",
+                            content=self._system_prompt(kb_context, memory_context)), *self.history]

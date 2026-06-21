@@ -25,6 +25,7 @@ from ai.tts import ElevenLabsTTS
 from app.controller import Controller
 from app.conversation import ConversationManager
 from app.logging_setup import get_logger, log_exception, setup_logging
+from app.memory import Brain, NullBrain
 from app.pipeline import ConversationPipeline
 from audio.mic import HostMic, MicSource
 from audio.sink import AudioSink, HostSpeaker
@@ -97,6 +98,18 @@ def build_mic() -> MicSource:
     return HostMic(settings.SAMPLE_RATE, settings.MIC_DEVICE)
 
 
+def build_brain(llm: LLMEngine):
+    """The robot's file-based memory. NullBrain only if the brain dir can't be created
+    (file IO only — no robot/DDS, so it works on the dev PC and the host alike)."""
+    try:
+        brain = Brain(settings.brain_path, llm=llm)
+        brain._ensure_dirs()
+        return brain
+    except Exception:
+        log_exception(log, "Brain dir unavailable — memory disabled (NullBrain)")
+        return NullBrain()
+
+
 def build_wake_audio():
     """Offline wake detector (openWakeWord) if WAKE_ENGINE=openwakeword, else None
     (the controller then uses the STT wake matcher). Falls back to None on failure."""
@@ -142,9 +155,10 @@ async def amain() -> None:
         led = LedIndicator(sink)  # head-LED state indicator (shared by both)
         dialogflow = DialogflowClient()  # optional "first answer"; no-op unless enabled
         search = WebSearchClient(http)   # optional Brave web search; no-op without key
+        brain = build_brain(llm)         # persistent memory (session snapshots + recall)
         pipeline = ConversationPipeline(transcriber, llm, tts, kb, conversation, arm, sink,
                                         led=led, dialogflow=dialogflow, locomotion=locomotion,
-                                        search=search)
+                                        search=search, brain=brain)
         controller = Controller(
             mic=mic,
             transcriber=transcriber,

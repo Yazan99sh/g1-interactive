@@ -78,6 +78,12 @@ class Controller:
     async def run(self) -> None:
         await self.mic.open()
         await self.led.start()
+        # Forget anything that has expired since last run (visitors age out; teams/
+        # supervisors persist). Best-effort — never block startup on the brain.
+        try:
+            self.pipeline.brain.sweep_expired()
+        except Exception:
+            log_exception(log, "Brain sweep on startup failed")
         log.info("Controller running. Say one of %s to wake the robot.", settings.WAKE_WORDS)
         try:
             while not self._stop:
@@ -207,4 +213,21 @@ class Controller:
             silent = 0  # real exchange — reset the idle counter
 
         log.info("No speech for %d turns — returning to STANDBY.", limit)
+        await self._end_session()
         self.state = PipelineState.STANDBY
+
+    async def _end_session(self) -> None:
+        """Persist the finished session: always snapshot a copy to the host, and (if
+        long-term memory is on) let the brain extract durable facts. Best-effort."""
+        brain = self.pipeline.brain
+        if not getattr(brain, "enabled", False):
+            return
+        try:
+            if settings.MEMORY_SESSION_SNAPSHOTS:
+                brain.snapshot_session(self.conversation.history)
+            if settings.LONG_TERM_MEMORY_ENABLED:
+                n = await brain.remember_session(self.conversation.history)
+                if n:
+                    log.info("Session ended — %d memory record(s) saved.", n)
+        except Exception:
+            log_exception(log, "Ending session (memory) failed")
