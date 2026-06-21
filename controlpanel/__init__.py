@@ -6,4 +6,4 @@ conversation transcript + rough cost view.
 
 Run from the project root:  python -m controlpanel   (binds PANEL_HOST:PANEL_PORT)
 """
-__version__ = "0.2.0"
+__version__ = "1.0.0"

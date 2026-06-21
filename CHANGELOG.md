@@ -2,6 +2,15 @@
 
 All notable changes to the G1 Interactive Voice Pipeline.
 
+## [1.0.0] — 2026-06-21 — First stable release
+
+First tagged stable release. Consolidates the 0.2.x–0.3.x feature set into a known-good
+baseline (the `stable-v1.0.0` branch): streaming + chunked bilingual TTS, offline wake word,
+the web **control panel**, Dialogflow CX answer-first (LLM fallback), experimental movement
+commands, selectable STT (OpenAI / Groq), arm gestures with relax timing, and Brave web search
+with a spoken announcement. No behavioural change versus `0.3.1` — this is a version/branch
+marker for the release that the `remember-me` branch builds on.
+
 ## [0.3.1] — 2026-06-19 — Brave web search
 
 ### Added — web search with a spoken announcement
