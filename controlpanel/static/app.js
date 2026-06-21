@@ -203,6 +203,19 @@ tabInit.dialogflow = async () => {
   $("dfTestOut").textContent = "";
 };
 
+// ---- web search ----
+tabInit.search = async () => {
+  const s = await api("/api/search");
+  $("wsEnabled").checked = !!s.enabled;
+  $("wsCount").value = s.count;
+  $("wsAnnEn").value = s.announce_en || "";
+  $("wsAnnAr").value = s.announce_ar || "";
+  $("wsKeyState").textContent = s.key_set
+    ? "✓ Brave API key is set."
+    : "⚠️ No BRAVE_SEARCH_API_KEY — set it in the Environment tab, or search stays off.";
+  $("wsTestOut").textContent = "";
+};
+
 // ---- environment ----
 const VOICE_KEYS = ["ELEVENLABS_VOICE_ID", "ELEVENLABS_ARABIC_VOICE_ID"];
 tabInit.environment = async () => {
@@ -358,6 +371,28 @@ function wire() {
       $("dfTestOut").textContent =
         `${hit}\nlang: ${r.lang}   match: ${r.match_type}   intent: ${r.intent || "-"}   conf: ${r.confidence}\n\n${r.answer || "(no answer)"}`;
     } catch (e) { $("dfTestOut").textContent = "✗ " + e.message; }
+  };
+
+  $("btnSearchSave").onclick = async () => {
+    const body = {
+      enabled: $("wsEnabled").checked,
+      count: parseInt($("wsCount").value, 10),
+      announce_en: $("wsAnnEn").value,
+      announce_ar: $("wsAnnAr").value,
+    };
+    try { const r = await api("/api/search", { method: "POST", body }); toast("Web-search settings saved"); if (r.restart_required) showRestart(); }
+    catch (e) { toast("Save failed: " + e.message, true); }
+  };
+  $("btnSearchTest").onclick = async () => {
+    const q = $("wsTestQ").value;
+    if (!q.trim()) { toast("Type a query to test", true); return; }
+    $("wsTestOut").textContent = "Searching…";
+    try {
+      const r = await api("/api/search/test", { method: "POST", body: { query: q } });
+      if (!r.ok) { $("wsTestOut").textContent = "✗ " + (r.detail || "failed"); return; }
+      const lines = (r.results || []).map((x, i) => `${i + 1}. ${x.title}\n   ${x.description}`).join("\n\n");
+      $("wsTestOut").textContent = `✓ ${r.count} result(s) (${r.lang})\n\n${lines || "(none)"}`;
+    } catch (e) { $("wsTestOut").textContent = "✗ " + e.message; }
   };
 
   $("btnEnvSave").onclick = saveEnv;

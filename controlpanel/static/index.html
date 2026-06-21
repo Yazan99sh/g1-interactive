@@ -39,6 +39,7 @@
       <button class="navItem" data-tab="gestures">🤖 Gestures</button>
       <button class="navItem" data-tab="speech">⚡ Speech</button>
       <button class="navItem" data-tab="dialogflow">🟢 Dialogflow</button>
+      <button class="navItem" data-tab="search">🔎 Web Search</button>
       <button class="navItem" data-tab="environment">🔑 Environment</button>
       <button class="navItem" data-tab="scripts">⚙️ Scripts</button>
     </nav>
@@ -190,6 +191,31 @@
           <pre id="dfTestOut" class="console"></pre>
         </div>
         <p class="muted">Takes effect on restart. Import/refresh the agent's Q&amp;A with <code>tools/cx_import.py</code>, verify with <code>tools/cx_test.py</code>.</p>
+      </section>
+
+      <!-- Web Search -->
+      <section class="tab" id="tab-search">
+        <h2>Web Search <span class="muted">answer from the live web when asked / for current info</span></h2>
+        <div class="card">
+          <label class="toggle"><input type="checkbox" id="wsEnabled"> Let the robot search the web (Brave)</label>
+          <p class="muted">Fires when the visitor says "search / look it up / google" or asks for current info (latest, news, weather, prices). The robot says it's searching first, then answers from the results. English + Arabic.</p>
+          <p class="muted" id="wsKeyState"></p>
+        </div>
+        <div class="card">
+          <div class="envField"><label for="wsCount">Results to use (1–10)</label><input id="wsCount" type="number" min="1" max="10" step="1"></div>
+          <div class="envField"><label for="wsAnnEn">Announcement — English</label><input id="wsAnnEn" type="text"></div>
+          <div class="envField"><label for="wsAnnAr">Announcement — Arabic</label><input id="wsAnnAr" type="text" dir="rtl"></div>
+        </div>
+        <button id="btnSearchSave" class="btn">Save web-search settings</button>
+        <div class="card">
+          <div class="card-label">Test a live search</div>
+          <div class="toolbar">
+            <input id="wsTestQ" type="text" placeholder="e.g. latest news about the National Infrastructure Fund" style="flex:1">
+            <button id="btnSearchTest" class="btn btn-tiny">Search</button>
+          </div>
+          <pre id="wsTestOut" class="console"></pre>
+        </div>
+        <p class="muted">Needs <code>BRAVE_SEARCH_API_KEY</code> (Environment tab). Takes effect on restart.</p>
       </section>
 
       <!-- Environment -->

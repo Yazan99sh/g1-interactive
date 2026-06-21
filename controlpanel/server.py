@@ -15,7 +15,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from . import cost, dialogflow, env_file, gestures, logtail, movement, paths, speech
+from . import cost, dialogflow, env_file, gestures, logtail, movement, paths, search, speech
 from .process_manager import ProcessManager
 from .scripts import ScriptRunner, list_scripts, save_upload
 
@@ -299,6 +299,29 @@ def test_dialogflow(payload: dict = Body(...)) -> dict:
     # Sync def -> Starlette runs it in the threadpool; detect_intent is a blocking gRPC
     # round-trip and must NOT run on the event loop (it would freeze the whole panel).
     return dialogflow.test_query(payload.get("query", ""))
+
+
+# ---- web search (Brave answer-from-the-web toggle + live test) ----
+@app.get("/api/search")
+async def get_search() -> dict:
+    return search.get_config()
+
+
+@app.post("/api/search")
+async def set_search(payload: dict = Body(...)) -> dict:
+    changed = search.set_config(
+        enabled=payload.get("enabled"),
+        count=payload.get("count"),
+        announce_en=payload.get("announce_en"),
+        announce_ar=payload.get("announce_ar"),
+    )
+    return {"ok": True, "restart_required": bool(changed)}
+
+
+@app.post("/api/search/test")
+def test_search(payload: dict = Body(...)) -> dict:
+    # Sync def -> threadpool; the Brave HTTP call must not block the event loop.
+    return search.test_query(payload.get("query", ""))
 
 
 # ---- scripts ----
