@@ -188,5 +188,25 @@ from robot.camera import NullCamera  # noqa: E402
 import asyncio as _a2  # noqa: E402
 check("camera null noop", _a2.run(NullCamera().capture()) is None and NullCamera().enabled is False)
 
+# 17. idle (sleep) intent + noise filter (EN + AR)
+from app.intents import parse_sleep_intent, looks_like_noise  # noqa: E402
+check("idle en go-idle", parse_sleep_intent("go idle") is True)
+check("idle en idle-state", parse_sleep_intent("idle state please") is True)
+check("idle en thats-all", parse_sleep_intent("okay that's all thanks") is True)
+check("idle en goodbye", parse_sleep_intent("goodbye robot") is True)
+check("idle ar nam", parse_sleep_intent("نام يا روبوت") is True)
+check("idle ar mode", parse_sleep_intent("ادخل وضع الخمول") is True)
+check("idle no-fire q", parse_sleep_intent("what does idle mean in a car engine exactly today") is None or
+      parse_sleep_intent("what does idle mean in a car engine exactly today") is False)  # too long
+check("idle no-fire normal", parse_sleep_intent("tell me about the fund") is False)
+check("idle ar no-fire sleep-word", parse_sleep_intent("أنا ما بنام بالليل من كثر التفكير") is False)
+check("noise empty", looks_like_noise("") is True)
+check("noise punct", looks_like_noise("...") is True)
+check("noise you", looks_like_noise("you") is True)
+check("noise thanks", looks_like_noise("Thanks for watching!") is True)
+check("noise ar shukran", looks_like_noise("شكرا") is True)
+check("noise real en", looks_like_noise("what time do you open") is False)
+check("noise real ar", looks_like_noise("ما هو صندوق البنية التحتية") is False)
+
 print("\nALL PASS" if ok else "\nSOME FAILED")
 sys.exit(0 if ok else 1)

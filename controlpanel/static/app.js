@@ -189,6 +189,8 @@ tabInit.speech = async () => {
   $("spChunking").checked = !!s.chunking;
   $("spChunkChars").value = s.chunk_max_chars;
   $("spSttBackend").value = s.stt_backend || "openai";
+  $("spNoiseMin").value = s.noise_min_chars;
+  $("spEndAnnounce").checked = !!s.end_announce;
 };
 
 // ---- dialogflow (answer-first toggle + live test) ----
@@ -414,6 +416,8 @@ function wire() {
       chunking: $("spChunking").checked,
       chunk_max_chars: parseInt($("spChunkChars").value, 10),
       stt_backend: $("spSttBackend").value,
+      noise_min_chars: parseInt($("spNoiseMin").value, 10),
+      end_announce: $("spEndAnnounce").checked,
     };
     try { const r = await api("/api/speech", { method: "POST", body }); toast("Speech settings saved"); if (r.restart_required) showRestart(); }
     catch (e) { toast("Save failed: " + e.message, true); }

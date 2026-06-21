@@ -155,6 +155,23 @@ class Settings:
     OWW_THRESHOLD: float = field(default_factory=lambda: _get_float("OWW_THRESHOLD", 0.5))
     OWW_INFERENCE_FRAMEWORK: str = field(default_factory=lambda: _get("OWW_INFERENCE_FRAMEWORK", "onnx"))
 
+    # ---- Idle command + listening hygiene ----
+    # Spoken when the visitor says "go idle / that's all / نام" — the robot acknowledges
+    # then drops back to STANDBY and waits for the wake word again.
+    IDLE_ANNOUNCE_EN: str = field(default_factory=lambda: _get("IDLE_ANNOUNCE_EN", "Okay, I'll be on standby. Say 'Hi robot' when you need me."))
+    IDLE_ANNOUNCE_AR: str = field(default_factory=lambda: _get("IDLE_ANNOUNCE_AR", "تمام، رح أكون بوضع الانتظار. قول «هاي روبوت» لما تحتاجني."))
+    # Noise / ASR-hallucination filter: drop transcriptions shorter than this many chars
+    # (treated as silence, so noise never reaches the LLM and the robot eventually idles).
+    NOISE_MIN_CHARS: int = field(default_factory=lambda: _get_int("NOISE_MIN_CHARS", 3))
+    # Extra phrases (comma-separated) to treat as noise on top of the built-in list of
+    # common Whisper hallucinations ("you", "thanks for watching", "شكرا"…).
+    NOISE_BLOCKLIST: list[str] = field(default_factory=lambda: _get_list("NOISE_BLOCKLIST", ""))
+    # When a conversation ends by silence, say one short line so the visitor knows the
+    # robot disengaged (then it returns to STANDBY). Turn off to end silently.
+    CONVERSATION_END_ANNOUNCE: bool = field(default_factory=lambda: _get_bool("CONVERSATION_END_ANNOUNCE", True))
+    CONVERSATION_END_EN: str = field(default_factory=lambda: _get("CONVERSATION_END_EN", "I'll be right here if you need me."))
+    CONVERSATION_END_AR: str = field(default_factory=lambda: _get("CONVERSATION_END_AR", "رح أكون هنا إذا احتجتني."))
+
     # ---- Robot / DDS ----
     ROBOT_ENABLED: bool = field(default_factory=lambda: _get_bool("ROBOT_ENABLED", True))
     DDS_DOMAIN: int = field(default_factory=lambda: _get_int("DDS_DOMAIN", 0))

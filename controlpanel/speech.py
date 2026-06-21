@@ -45,6 +45,9 @@ def get_config() -> dict:
         "chunking": _get_bool("TTS_CHUNKING_ENABLED", True),
         "chunk_max_chars": _get_int("TTS_CHUNK_MAX_CHARS", 180),
         "stt_backend": _get_str("STT_BACKEND", "openai").strip().lower(),
+        # Listening hygiene: ignore noise/empty turns + the end-of-conversation cue.
+        "noise_min_chars": _get_int("NOISE_MIN_CHARS", 3),
+        "end_announce": _get_bool("CONVERSATION_END_ANNOUNCE", True),
     }
 
 
@@ -52,7 +55,8 @@ def get_config() -> dict:
 CHUNK_MIN, CHUNK_MAX = 40, 600
 
 
-def set_config(streaming=None, chunking=None, chunk_max_chars=None, stt_backend=None) -> bool:
+def set_config(streaming=None, chunking=None, chunk_max_chars=None, stt_backend=None,
+               noise_min_chars=None, end_announce=None) -> bool:
     """Write any provided settings to .env. Returns True iff something was written."""
     updates: dict[str, str] = {}
     if streaming is not None:
@@ -70,6 +74,13 @@ def set_config(streaming=None, chunking=None, chunk_max_chars=None, stt_backend=
         b = str(stt_backend).strip().lower()
         if b in STT_BACKENDS:
             updates["STT_BACKEND"] = b
+    if noise_min_chars is not None:
+        try:
+            updates["NOISE_MIN_CHARS"] = str(max(0, min(20, int(noise_min_chars))))
+        except (TypeError, ValueError):
+            pass
+    if end_announce is not None:
+        updates["CONVERSATION_END_ANNOUNCE"] = "true" if end_announce else "false"
     if updates:
         env_file.update(paths.ENV_FILE, updates)
     return bool(updates)

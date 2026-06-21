@@ -271,6 +271,8 @@ async def set_speech(payload: dict = Body(...)) -> dict:
         chunking=payload.get("chunking"),
         chunk_max_chars=payload.get("chunk_max_chars"),
         stt_backend=payload.get("stt_backend"),
+        noise_min_chars=payload.get("noise_min_chars"),
+        end_announce=payload.get("end_announce"),
     )
     return {"ok": True, "restart_required": bool(changed)}
 

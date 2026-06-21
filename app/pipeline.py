@@ -24,6 +24,7 @@ from app.conversation import ConversationManager
 from app.logging_setup import get_logger, log_exception
 from app.memory import NullBrain
 from app.metrics import record_event
+from app.intents import looks_like_noise, parse_sleep_intent
 from app.movement import MovementCommand, parse_movement
 from app.peek import PeekRequest, parse_peek_intent
 from app.state import Emotion, Language, Reply, Transcription, parse_emotion, _EMOTION_TAG
@@ -77,6 +78,8 @@ class TurnOutcome:
     user_text: str = ""
     reply_text: str = ""
     error: Optional[str] = None
+    # The visitor asked the robot to go idle — the controller drops back to STANDBY.
+    go_idle: bool = False
 
 
 class ConversationPipeline:
@@ -144,6 +147,23 @@ class ConversationPipeline:
         if transcription.is_blank:
             log.info("Empty transcription — treating as silence.")
             return TurnOutcome(had_speech=False)
+        # Noise / ASR hallucination on ambient sound (too short, punctuation-only, or a
+        # known filler like "you"/"thanks for watching"/"شكرا") — treat as silence so the
+        # robot doesn't answer noise and eventually returns to idle on its own.
+        if looks_like_noise(transcription.text):
+            log.info("Noise/non-speech transcription %r — treating as silence.", transcription.text[:40])
+            return TurnOutcome(had_speech=False)
+
+        # Idle command: "go idle / that's all / نام" — acknowledge and drop to STANDBY.
+        if parse_sleep_intent(transcription.text):
+            lang = transcription.language or self.conversation.language
+            self.conversation.set_language(lang)
+            ack = settings.IDLE_ANNOUNCE_AR if lang is Language.ARABIC else settings.IDLE_ANNOUNCE_EN
+            self.led.set_state("speaking")
+            await self.say(ack, lang, emotion=Emotion.SLEEPY, gesture=True)
+            log.info("Idle command — returning to standby.")
+            return TurnOutcome(had_speech=True, user_text=transcription.text,
+                               reply_text=ack, go_idle=True)
 
         # Experimental: a movement order ("move forward", "وقف"…) is handled here,
         # before the normal answer path, when enabled and running on the robot.

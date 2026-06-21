@@ -206,6 +206,12 @@ class Controller:
             if outcome.error:
                 # Blink red briefly so a failure is visible, then carry on listening.
                 await self.led.flash("error", 600)
+            if outcome.go_idle:
+                # The visitor asked the robot to go idle — drop straight to STANDBY.
+                log.info("Idle requested — returning to STANDBY.")
+                await self._end_session()
+                self.state = PipelineState.STANDBY
+                return
             if not outcome.had_speech:
                 silent += 1
                 log.info("Silent turn %d/%d (blank transcription)", silent, limit)
@@ -213,8 +219,21 @@ class Controller:
             silent = 0  # real exchange — reset the idle counter
 
         log.info("No speech for %d turns — returning to STANDBY.", limit)
+        await self._announce_conversation_end()
         await self._end_session()
         self.state = PipelineState.STANDBY
+
+    async def _announce_conversation_end(self) -> None:
+        """Say one short line when a conversation lapses into silence, so the visitor
+        knows the robot disengaged. Skipped if disabled or there was no real exchange."""
+        if not settings.CONVERSATION_END_ANNOUNCE or not self.conversation.history:
+            return
+        lang = self.conversation.language
+        line = settings.CONVERSATION_END_AR if lang is Language.ARABIC else settings.CONVERSATION_END_EN
+        try:
+            await self.pipeline.say(line, lang, emotion=Emotion.NEUTRAL, gesture=False)
+        except Exception:
+            log_exception(log, "End-of-conversation announce failed")
 
     async def _end_session(self) -> None:
         """Persist the finished session: always snapshot a copy to the host, and (if
