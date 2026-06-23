@@ -74,13 +74,19 @@ class Settings:
     BRAVE_SEARCH_API_KEY: str = field(default_factory=lambda: _get("BRAVE_SEARCH_API_KEY"))
 
     # ---- LLM ----
-    LLM_BACKEND: str = field(default_factory=lambda: _get("LLM_BACKEND", "openrouter"))
+    # Which provider goes first in the endpoint chain: "openrouter" (default) |
+    # "openai" | "gemini". The other configured providers stay as automatic fallbacks.
+    # Pick the model/provider from the panel's Models tab.
+    LLM_BACKEND: str = field(default_factory=lambda: _get("LLM_BACKEND", "openrouter").strip().lower())
     # Stream the reply sentence-by-sentence into TTS so the robot starts talking as
     # soon as the first sentence is ready (much lower perceived latency). Falls back
     # to the one-shot path automatically if streaming yields nothing.
     STREAMING_ENABLED: bool = field(default_factory=lambda: _get_bool("STREAMING_ENABLED", True))
     OPENROUTER_MODEL: str = field(default_factory=lambda: _get("OPENROUTER_MODEL", "openai/gpt-4o-mini"))
     OPENAI_LLM_MODEL: str = field(default_factory=lambda: _get("OPENAI_LLM_MODEL", "gpt-4o-mini"))
+    # Google Gemini via its OpenAI-compatible endpoint (same /chat/completions schema),
+    # used when LLM_BACKEND=gemini (needs GEMINI_API_KEY). Default = a fast, cheap model.
+    GEMINI_LLM_MODEL: str = field(default_factory=lambda: _get("GEMINI_LLM_MODEL", "gemini-3.1-flash-lite"))
     LLM_TEMPERATURE: float = field(default_factory=lambda: _get_float("LLM_TEMPERATURE", 0.6))
     # 0 = NO hard cap (recommended): the max_tokens param is omitted so the model is
     # never cut off mid-sentence. Control reply length with instructions in
@@ -327,6 +333,7 @@ class Settings:
         return {
             "OPENAI_API_KEY": mask(self.OPENAI_API_KEY),
             "OPENROUTER_API_KEY": mask(self.OPENROUTER_API_KEY),
+            "GEMINI_API_KEY": (mask(self.GEMINI_API_KEY) if self.LLM_BACKEND == "gemini" else "—"),
             "ELEVENLABS_API_KEY": mask(self.ELEVENLABS_API_KEY),
             "GROQ_API_KEY": (mask(self.GROQ_API_KEY) if self.STT_BACKEND == "groq" else "—"),
             "BRAVE_SEARCH_API_KEY": (mask(self.BRAVE_SEARCH_API_KEY) if self.WEB_SEARCH_ENABLED else "—"),
@@ -334,6 +341,7 @@ class Settings:
             "LLM_BACKEND": self.LLM_BACKEND,
             "STREAMING_ENABLED": self.STREAMING_ENABLED,
             "OPENROUTER_MODEL": self.OPENROUTER_MODEL,
+            "GEMINI_LLM_MODEL": (self.GEMINI_LLM_MODEL if self.LLM_BACKEND == "gemini" else "—"),
             "STT_BACKEND": self.STT_BACKEND,
             "OPENAI_STT_MODEL": self.OPENAI_STT_MODEL,
             "GROQ_STT_MODEL": self.GROQ_STT_MODEL if self.STT_BACKEND == "groq" else "—",

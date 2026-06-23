@@ -33,12 +33,17 @@ deployed exactly like the teleop setup: a Linux host on the robot's
 | **Standby** | VAD-gated capture; transcribe only when someone speaks; match a wake phrase | OpenAI STT + wake matcher |
 | **Ack** | Robot says "Aha!" and waves | ElevenLabs + arm gesture |
 | **Listening** | Capture the user's utterance, end-pointed by silence | `sounddevice` mic + RMS VAD |
-| **Thinking** | Optional Dialogflow CX answer-first → else knowledge base retrieval → LLM (persona, bilingual) | Dialogflow CX → OpenRouter → OpenAI |
+| **Thinking** | Optional Dialogflow CX answer-first → else knowledge base retrieval → LLM (persona, bilingual) | Dialogflow CX → OpenRouter / OpenAI / Gemini |
 | **Responding** | Speak the reply; one arm move (then relaxes after 1–3 s); LED by state | ElevenLabs (PCM) → G1 speaker |
 
 **STT** is selectable (`STT_BACKEND`): OpenAI `gpt-4o-transcribe` (default) or Groq
-`whisper-large-v3-turbo` (faster). Experimental voice **movement** commands ("move
-forward", "turn left", "وقف") can be enabled from the panel. See `RESEARCH.md`.
+`whisper-large-v3-turbo` (faster). The **LLM** is selectable too (`LLM_BACKEND`):
+OpenRouter (default), OpenAI, or Google **Gemini** (`gemini-3.1-flash-lite` via Google's
+OpenAI-compatible endpoint) — the chosen provider goes first, the rest stay as fallbacks.
+The **TTS** model is selectable (`ELEVENLABS_MODEL`): `eleven_flash_v2_5` (ultra-low
+latency, default) or `eleven_v3` (most expressive). Pick LLM + TTS from the panel's
+**Models** tab. Experimental voice **movement** commands ("move forward", "turn left",
+"وقف") can be enabled from the panel. See `RESEARCH.md`.
 
 Reply text starts with an `[EMOTION:happy]`-style tag (stripped before speaking)
 that selects the arm gesture + LED colour — same trick as `super-star`.
@@ -81,8 +86,8 @@ g1-interactive/
     intents.py            idle/sleep-command + noise/ASR-hallucination filters (EN + AR)
   ai/
     stt.py                STT — OpenAI gpt-4o-transcribe or Groq Whisper (STT_BACKEND)
-    tts.py                ElevenLabs flash v2.5 (raw PCM output)
-    llm.py                OpenRouter (primary) → OpenAI (fallback) + describe_image (vision)
+    tts.py                ElevenLabs TTS, raw PCM output (ELEVENLABS_MODEL: flash v2.5 / v3 / …)
+    llm.py                LLM chain — selected LLM_BACKEND first (OpenRouter/OpenAI/Gemini), rest fallback + describe_image (vision)
     dialogflow.py         optional Dialogflow CX "answer-first" stage (LLM fallback)
     knowledge_base.py     loads knowledge/*.md, RAG + verbatim FAQ
   app/

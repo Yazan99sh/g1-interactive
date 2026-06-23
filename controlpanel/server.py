@@ -15,7 +15,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from . import cost, dialogflow, env_file, gestures, logtail, memory, movement, paths, search, speech, vision
+from . import cost, dialogflow, env_file, gestures, logtail, memory, models, movement, paths, search, speech, vision
 from .process_manager import ProcessManager
 from .scripts import ScriptRunner, list_scripts, save_upload
 
@@ -254,6 +254,21 @@ async def set_movement(payload: dict = Body(...)) -> dict:
         speed=payload.get("speed"),
         yaw=payload.get("yaw"),
         duration_s=payload.get("duration_s"),
+    )
+    return {"ok": True, "restart_required": bool(changed)}
+
+
+# ---- models (selectable LLM provider/model + TTS voice model) ----
+@app.get("/api/models")
+async def get_models() -> dict:
+    return models.get_config()
+
+
+@app.post("/api/models")
+async def set_models(payload: dict = Body(...)) -> dict:
+    changed = models.set_config(
+        llm_preset=payload.get("llm_preset"),
+        tts_model=payload.get("tts_model"),
     )
     return {"ok": True, "restart_required": bool(changed)}
 

@@ -2,6 +2,37 @@
 
 All notable changes to the G1 Interactive Voice Pipeline.
 
+## [1.2.0] — 2026-06-23 — Selectable LLM + TTS models (control-panel managed)
+
+Developed on the `remember-me` branch (continues 1.1.0).
+
+### Added — Google Gemini as a selectable LLM backend
+- `ai/llm.py` now builds the endpoint chain from **three** providers — OpenRouter, OpenAI
+  and **Gemini** — and tries the one named by `LLM_BACKEND` first, keeping the others
+  (whose key is set) as automatic fallbacks. Endpoints without an API key are dropped.
+- Gemini is reached through **Google's OpenAI-compatible** `/chat/completions` endpoint
+  (`https://generativelanguage.googleapis.com/v1beta/openai/...`), so it rides the same
+  Bearer-auth / `stream=true` / `[DONE]` code path — including `describe_image` (peek/vision).
+- New `GEMINI_LLM_MODEL` (default **`gemini-3.1-flash-lite`**); uses the existing `GEMINI_API_KEY`.
+  `LLM_BACKEND` accepts `openrouter | openai | gemini` and is now normalized (trim+lowercase).
+
+### Added — selectable ElevenLabs TTS model
+- `ELEVENLABS_MODEL` is now chosen from a curated list: **`eleven_flash_v2_5`** (ultra-low
+  latency, default), **`eleven_v3`** (most expressive, higher latency), plus multilingual v2
+  (Turbo v2.5 kept for parity but marked superseded by Flash).
+
+### Added — control panel "🧩 Models" tab
+- New `controlpanel/models.py` (`LLM_PRESETS` / `TTS_MODELS`, `get_config`/`set_config`) and
+  `GET`/`POST /api/models`. The tab picks the LLM provider+model and the TTS model, flags a
+  ⚠️ when the chosen provider's API key is missing, preserves custom (non-preset) configs, and
+  validates the TTS id against `.env` injection. STT stays on the Speech tab.
+
+### Changed
+- `tools/doctor.py` preflight now recognizes Gemini for the LLM key check and splits the
+  LLM/STT check (STT needs OpenAI or Groq; Gemini can't transcribe).
+- Docs: `.env.example`, `README.md`, `CONTROL_PANEL.md` updated. `tools/_selftest.py` gains
+  checks #18 (model presets) and #19 (LLM chain ordering + Gemini fallback) — 100 checks pass.
+
 ## [1.1.0] — 2026-06-21 — Memory brain, peek (vision), idle command, noise robustness
 
 Developed on the `remember-me` branch (off `stable-v1.0.0`).

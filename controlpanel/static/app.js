@@ -182,6 +182,34 @@ tabInit.gestures = async () => {
   } catch (_) {}
 };
 
+// ---- models (selectable LLM provider/model + TTS voice) ----
+let modelsCfg = null;
+function renderLlmNote() {
+  if (!modelsCfg) return;
+  const p = (modelsCfg.llm.presets || []).find((x) => x.id === $("mdlLlm").value);
+  if (!p) { $("mdlLlmNote").textContent = ""; return; }
+  const key = p.key_name
+    ? (p.key_set ? `✓ ${p.key_name} is set.` : `⚠️ ${p.key_name} is not set — set it in the Environment tab or this provider can't run.`)
+    : "Custom configuration (set via the Environment tab).";
+  $("mdlLlmNote").textContent = `${p.backend} · ${p.model}   —   ${key}`;
+}
+function renderTtsNote() {
+  if (!modelsCfg) return;
+  const m = (modelsCfg.tts.models || []).find((x) => x.id === $("mdlTts").value);
+  $("mdlTtsNote").textContent = m && m.note ? m.note : "";
+}
+tabInit.models = async () => {
+  modelsCfg = await api("/api/models");
+  $("mdlLlm").innerHTML = (modelsCfg.llm.presets || []).map((p) =>
+    `<option value="${escapeAttr(p.id)}" ${p.id === modelsCfg.llm.preset ? "selected" : ""}>` +
+    `${escapeHtml(p.label)}${p.key_name && !p.key_set ? " ⚠️" : ""}</option>`).join("");
+  $("mdlTts").innerHTML = (modelsCfg.tts.models || []).map((m) =>
+    `<option value="${escapeAttr(m.id)}" ${m.id === modelsCfg.tts.model ? "selected" : ""}>` +
+    `${escapeHtml(m.label)}</option>`).join("");
+  renderLlmNote();
+  renderTtsNote();
+};
+
 // ---- speech (latency toggles) ----
 tabInit.speech = async () => {
   const s = await api("/api/speech");
@@ -407,6 +435,14 @@ function wire() {
       duration_s: parseFloat($("mvDur").value),
     };
     try { const r = await api("/api/movement", { method: "POST", body }); toast("Movement settings saved"); if (r.restart_required) showRestart(); }
+    catch (e) { toast("Save failed: " + e.message, true); }
+  };
+
+  $("mdlLlm").onchange = renderLlmNote;
+  $("mdlTts").onchange = renderTtsNote;
+  $("btnModelsSave").onclick = async () => {
+    const body = { llm_preset: $("mdlLlm").value, tts_model: $("mdlTts").value };
+    try { const r = await api("/api/models", { method: "POST", body }); toast("Models saved"); if (r.restart_required) showRestart(); }
     catch (e) { toast("Save failed: " + e.message, true); }
   };
 

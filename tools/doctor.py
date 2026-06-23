@@ -76,10 +76,16 @@ def check_keys(env: dict[str, str]) -> None:
         line("FAIL", ".env present", "cp .env.example .env")
         return
     line("PASS", ".env present")
-    if env.get("OPENAI_API_KEY") or env.get("OPENROUTER_API_KEY"):
-        line("PASS", "LLM/STT key", "OpenAI/OpenRouter set")
+    # LLM works with any one provider — the chain (ai/llm.py) drops endpoints without a key.
+    if env.get("OPENAI_API_KEY") or env.get("OPENROUTER_API_KEY") or env.get("GEMINI_API_KEY"):
+        line("PASS", "LLM key", "OpenAI / OpenRouter / Gemini set")
     else:
-        line("FAIL", "LLM/STT key", "set OPENAI_API_KEY or OPENROUTER_API_KEY")
+        line("FAIL", "LLM key", "set OPENAI_API_KEY, OPENROUTER_API_KEY or GEMINI_API_KEY")
+    # STT needs OpenAI (gpt-4o-transcribe) or Groq (Whisper) — Gemini can't transcribe.
+    if env.get("OPENAI_API_KEY") or env.get("GROQ_API_KEY"):
+        line("PASS", "STT key", "OpenAI / Groq set")
+    else:
+        line("FAIL", "STT key", "set OPENAI_API_KEY or GROQ_API_KEY")
     if env.get("ELEVENLABS_API_KEY"):
         line("PASS", "ElevenLabs key", mask(env["ELEVENLABS_API_KEY"]))
     else:

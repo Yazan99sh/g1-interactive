@@ -37,6 +37,7 @@
       <button class="navItem" data-tab="knowledge">📚 Knowledge</button>
       <button class="navItem" data-tab="instructions">🧠 Instructions</button>
       <button class="navItem" data-tab="gestures">🤖 Gestures</button>
+      <button class="navItem" data-tab="models">🧩 Models</button>
       <button class="navItem" data-tab="speech">⚡ Speech</button>
       <button class="navItem" data-tab="dialogflow">🟢 Dialogflow</button>
       <button class="navItem" data-tab="search">🔎 Web Search</button>
@@ -141,6 +142,28 @@
           <div class="envField"><label for="mvDur">Duration per command (s, ≤ 3)</label><input id="mvDur" type="number" min="0.3" max="3" step="0.1"></div>
           <button id="btnMovementSave" class="btn">Save movement settings</button>
         </div>
+      </section>
+
+      <!-- Models -->
+      <section class="tab" id="tab-models">
+        <h2>Models <span class="muted">pick the brain (LLM) and the voice (TTS)</span></h2>
+        <div class="card">
+          <div class="card-label">Language model — the robot's "thinking"</div>
+          <div class="envField"><label for="mdlLlm">LLM provider &amp; model</label>
+            <select id="mdlLlm"></select>
+          </div>
+          <p class="muted" id="mdlLlmNote"></p>
+          <p class="muted">The chosen provider is tried first; the others (if their key is set) stay as automatic fallbacks. Set the matching key in the Environment tab.</p>
+        </div>
+        <div class="card">
+          <div class="card-label">Voice — ElevenLabs text-to-speech</div>
+          <div class="envField"><label for="mdlTts">TTS model</label>
+            <select id="mdlTts"></select>
+          </div>
+          <p class="muted" id="mdlTtsNote"></p>
+        </div>
+        <button id="btnModelsSave" class="btn">Save models</button>
+        <p class="muted">Takes effect on restart. Speech-to-text is chosen on the <b>Speech</b> tab.</p>
       </section>
 
       <!-- Speech -->

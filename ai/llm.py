@@ -54,8 +54,20 @@ class LLMEngine:
             model=settings.OPENAI_LLM_MODEL,
             extra_headers={},
         )
-        order = [openai, openrouter] if settings.LLM_BACKEND == "openai" else [openrouter, openai]
-        return [ep for ep in order if ep.api_key]
+        # Google Gemini speaks the OpenAI /chat/completions schema at this base URL,
+        # so it slots into the same code path (Bearer auth, stream=true, [DONE]).
+        gemini = Endpoint(
+            name="gemini",
+            url="https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
+            api_key=settings.GEMINI_API_KEY,
+            model=settings.GEMINI_LLM_MODEL,
+            extra_headers={},
+        )
+        # Put the selected backend first; the rest follow as automatic fallbacks (stable
+        # order). Endpoints without an API key are dropped.
+        chain = [openrouter, openai, gemini]
+        chain.sort(key=lambda ep: 0 if ep.name == settings.LLM_BACKEND else 1)
+        return [ep for ep in chain if ep.api_key]
 
     async def complete(self, messages: list[ChatMessage]) -> str:
         """Return the assistant reply text, trying each endpoint in turn.

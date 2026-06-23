@@ -16,6 +16,7 @@ whether it runs as a **systemd service** or as a **panel-managed subprocess**
 | **Knowledge** | Browse/edit/create/delete the `knowledge/*.md` FAQ + facts |
 | **Instructions** | Edit the robot's persona / system prompt (`prompts/persona.md`) |
 | **Gestures** | Pick the one arm move the robot makes when it starts talking, and the wake / meet-and-greet wave — named-gesture dropdowns (no raw ids). Also the **experimental Movement** toggle (voice "move forward/left/…", speed + duration) |
+| **Models** | Pick the **LLM** provider + model (Gemini 3.1 Flash-Lite, GPT-4o mini via OpenRouter/OpenAI, GPT-4o) and the **ElevenLabs TTS** model (Flash v2.5 ultra-low latency / Eleven v3 expressive / …). Writes `LLM_BACKEND` + the matching model key and `ELEVENLABS_MODEL`; shows ⚠️ when the chosen provider's API key is missing |
 | **Speech** | Pick the **STT engine** (OpenAI / Groq Whisper), toggle streaming + chunked speech and set the piece size — controls how fast the robot listens + starts talking |
 | **Dialogflow** | Turn **Dialogflow CX answer-first** on/off (LLM fallback), set the agent (project/location/agent id/key) + confidence, and **live-test** the agent from a query box |
 | **Web Search** | Turn **Brave web search** on/off, set how many results to use + the spoken "let me search" announcement (EN/AR), and **live-test** a query |

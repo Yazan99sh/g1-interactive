@@ -208,5 +208,41 @@ check("noise ar shukran", looks_like_noise("شكرا") is True)
 check("noise real en", looks_like_noise("what time do you open") is False)
 check("noise real ar", looks_like_noise("ما هو صندوق البنية التحتية") is False)
 
+# 18. model presets — curated LLM list + TTS validation (pure, no .env writes)
+from controlpanel import models as _models  # noqa: E402
+check("models has gemini", any(p["model"] == "gemini-3.1-flash-lite" for p in _models.LLM_PRESETS))
+check("models llm match gemini", _models.match_llm_preset("gemini", "gemini-3.1-flash-lite") == "gemini-3.1-flash-lite")
+check("models llm match default", _models.match_llm_preset("openrouter", "openai/gpt-4o-mini") == "openrouter-gpt-4o-mini")
+check("models llm custom", _models.match_llm_preset("openai", "o1-preview") == "custom")
+check("models find preset", (lambda p: p is not None and p["backend"] == "gemini")(_models.find_preset("gemini-3.1-flash-lite")))
+check("models find none", _models.find_preset("nope") is None)
+check("models tts v3", any(m["id"] == "eleven_v3" for m in _models.TTS_MODELS))
+check("models tts flash", any(m["id"] == "eleven_flash_v2_5" for m in _models.TTS_MODELS))
+
+# 19. LLM endpoint chain — gemini is selectable and the chosen backend goes first
+import httpx as _httpx2  # noqa: E402
+from ai.llm import LLMEngine  # noqa: E402
+_h2 = _httpx2.AsyncClient()
+_ob, _og = settings.LLM_BACKEND, settings.GEMINI_API_KEY
+_oor, _ooa = settings.OPENROUTER_API_KEY, settings.OPENAI_API_KEY
+try:
+    settings.OPENROUTER_API_KEY = "or_test"
+    settings.OPENAI_API_KEY = "oa_test"
+    settings.GEMINI_API_KEY = "g_test"
+    settings.LLM_BACKEND = "gemini"
+    _eng = LLMEngine(_h2)
+    check("llm gemini first", bool(_eng.endpoints) and _eng.endpoints[0].name == "gemini")
+    check("llm gemini model", _eng.endpoints[0].model == settings.GEMINI_LLM_MODEL)
+    check("llm gemini openai-compat url", "generativelanguage.googleapis.com/v1beta/openai" in _eng.endpoints[0].url)
+    settings.LLM_BACKEND = "openai"
+    check("llm openai first", LLMEngine(_h2).endpoints[0].name == "openai")
+    settings.GEMINI_API_KEY = ""
+    settings.LLM_BACKEND = "gemini"
+    check("llm gemini fallback no-key", all(ep.name != "gemini" for ep in LLMEngine(_h2).endpoints))
+finally:
+    settings.LLM_BACKEND, settings.GEMINI_API_KEY = _ob, _og
+    settings.OPENROUTER_API_KEY, settings.OPENAI_API_KEY = _oor, _ooa
+    import asyncio as _a3; _a3.run(_h2.aclose())
+
 print("\nALL PASS" if ok else "\nSOME FAILED")
 sys.exit(0 if ok else 1)
