@@ -6,6 +6,12 @@ RealSense on the Jetson over USB. This serves ONE JPEG per request so the voice 
 the other host can "peek": it GETs ``http://<jetson>:8090/snapshot`` and passes the JPEG
 to a vision model.
 
+A dedicated capture thread owns the camera (start + continuous grab + cache the latest
+JPEG); the HTTP handlers only read the cached frame. This is deliberate: pyrealsense2
+raises "wait_for_frames cannot be called before start()" when start() and
+wait_for_frames() run on different threads, and ThreadingHTTPServer handles each request
+on a new thread — so every camera call must live on one thread.
+
 Deploy on the Jetson::
 
     ssh unitree@192.168.123.164        # password: 123
@@ -27,6 +33,7 @@ from __future__ import annotations
 import os
 import sys
 import threading
+import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 PORT = int(os.environ.get("CAM_PORT", "8090"))
@@ -37,24 +44,44 @@ DEVICE = int(os.environ.get("CAM_DEVICE", "0"))
 
 
 class Camera:
-    """Grabs a single JPEG. Prefers the RealSense; falls back to a V4L2 device."""
+    """Owns the camera on ONE background thread and caches the latest JPEG frame.
+
+    All RealSense/OpenCV calls happen inside ``_run`` (one thread); ``snapshot()`` only
+    reads the cached bytes under a lock, so it is safe to call from any HTTP worker
+    thread. This sidesteps pyrealsense2's same-thread requirement for
+    start()/wait_for_frames().
+    """
 
     def __init__(self) -> None:
         self._lock = threading.Lock()
-        self._rs = None
-        self._cv = None
-        self._backend = self._open()
+        self._latest: bytes | None = None
+        self.backend = "starting"
+        self._stop = threading.Event()
+        self._thread = threading.Thread(target=self._run, name="camera", daemon=True)
+        self._thread.start()
+        # Give the backend a moment to open and produce the first frame.
+        for _ in range(50):
+            if self._latest is not None or self.backend == "none":
+                break
+            time.sleep(0.1)
 
-    def _open(self) -> str:
+    def _open(self):
+        """Return (backend_name, grab). grab() returns a BGR ndarray or None."""
         try:
+            import numpy as np  # type: ignore
             import pyrealsense2 as rs  # type: ignore
             pipeline = rs.pipeline()
             cfg = rs.config()
             cfg.enable_stream(rs.stream.color, WIDTH, HEIGHT, rs.format.bgr8, 30)
             pipeline.start(cfg)
-            self._rs = (rs, pipeline)
             print(f"[camera] RealSense color stream {WIDTH}x{HEIGHT} started.")
-            return "realsense"
+
+            def grab():
+                frames = pipeline.wait_for_frames(timeout_ms=2000)
+                color = frames.get_color_frame()
+                return np.asanyarray(color.get_data()) if color else None
+
+            return "realsense", grab
         except Exception as exc:  # noqa: BLE001
             print(f"[camera] RealSense unavailable ({exc}); trying OpenCV V4L2 device {DEVICE}.")
         try:
@@ -64,36 +91,47 @@ class Camera:
             cap.set(cv2.CAP_PROP_FRAME_HEIGHT, HEIGHT)
             if not cap.isOpened():
                 raise RuntimeError("VideoCapture did not open")
-            self._cv = cap
             print(f"[camera] OpenCV V4L2 device {DEVICE} opened.")
-            return "opencv"
+
+            def grab():
+                ok, img = cap.read()
+                return img if ok else None
+
+            return "opencv", grab
         except Exception as exc:  # noqa: BLE001
             print(f"[camera] No camera backend available: {exc}", file=sys.stderr)
-            return "none"
+        return "none", None
+
+    def _run(self) -> None:
+        backend, grab = self._open()
+        self.backend = backend
+        if grab is None:
+            return
+        try:
+            import cv2  # type: ignore
+        except Exception as exc:  # noqa: BLE001
+            print(f"[camera] OpenCV (cv2) is required to encode JPEG: {exc}", file=sys.stderr)
+            self.backend = "none"
+            return
+        while not self._stop.is_set():
+            try:
+                img = grab()
+            except Exception as exc:  # noqa: BLE001
+                print(f"[camera] grab failed: {exc}", file=sys.stderr)
+                time.sleep(0.1)
+                continue
+            if img is None:
+                time.sleep(0.03)
+                continue
+            ok, buf = cv2.imencode(".jpg", img, [cv2.IMWRITE_JPEG_QUALITY, QUALITY])
+            if ok:
+                with self._lock:
+                    self._latest = buf.tobytes()
+            time.sleep(0.02)
 
     def snapshot(self) -> bytes | None:
         with self._lock:
-            try:
-                import cv2  # type: ignore
-                if self._backend == "realsense":
-                    rs, pipeline = self._rs
-                    frames = pipeline.wait_for_frames(timeout_ms=2000)
-                    color = frames.get_color_frame()
-                    if not color:
-                        return None
-                    import numpy as np  # type: ignore
-                    img = np.asanyarray(color.get_data())
-                elif self._backend == "opencv":
-                    ok, img = self._cv.read()
-                    if not ok:
-                        return None
-                else:
-                    return None
-                ok, buf = cv2.imencode(".jpg", img, [cv2.IMWRITE_JPEG_QUALITY, QUALITY])
-                return buf.tobytes() if ok else None
-            except Exception as exc:  # noqa: BLE001
-                print(f"[camera] snapshot failed: {exc}", file=sys.stderr)
-                return None
+            return self._latest
 
 
 camera = Camera()
@@ -128,11 +166,13 @@ class Handler(BaseHTTPRequestHandler):
 
 def main() -> None:
     server = ThreadingHTTPServer(("0.0.0.0", PORT), Handler)
-    print(f"[camera] serving JPEG snapshots on http://0.0.0.0:{PORT}/snapshot")
+    print(f"[camera] serving JPEG snapshots on http://0.0.0.0:{PORT}/snapshot "
+          f"(backend: {camera.backend})")
     try:
         server.serve_forever()
     except KeyboardInterrupt:
         print("\n[camera] stopping.")
+        camera._stop.set()
 
 
 if __name__ == "__main__":
