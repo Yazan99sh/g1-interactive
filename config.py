@@ -188,6 +188,14 @@ class Settings:
     # tail. If you still hear pieces overlap on the robot, raise this; if there are
     # audible gaps between pieces, lower it. Validate on the real robot.
     ROBOT_SPEAKER_TAIL_DRAIN_MS: int = field(default_factory=lambda: _get_int("ROBOT_SPEAKER_TAIL_DRAIN_MS", 200))
+    # PCM is streamed to the robot in chunks over DDS. Smaller chunks transmit faster and
+    # deliver more smoothly over a marginal (Wi-Fi) link, and start audio sooner; larger
+    # chunks mean fewer RPCs. Default 32000 B = 1.0 s @ 16k/16-bit/mono (was 96000 = 3 s).
+    ROBOT_SPEAKER_CHUNK_BYTES: int = field(default_factory=lambda: _get_int("ROBOT_SPEAKER_CHUNK_BYTES", 32000))
+    # Feed pace: keep wall-clock at PACE× the audio sent so far, i.e. stay (1-PACE) ahead as
+    # a buffer cushion. 0.9 = 10% lead. Lower (e.g. 0.8) builds a bigger cushion against a
+    # jittery link (at the cost of a longer initial buffering delay); 1.0 = no lead.
+    ROBOT_SPEAKER_PACE: float = field(default_factory=lambda: _get_float("ROBOT_SPEAKER_PACE", 0.9))
     ARM_GESTURES_ENABLED: bool = field(default_factory=lambda: _get_bool("ARM_GESTURES_ENABLED", True))
     # If true, command the locomotion FSM (LocoClient.Start) at startup so arm
     # actions are accepted. Leave FALSE for safety: put the robot in Main/Regular

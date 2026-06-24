@@ -265,8 +265,10 @@ class ConversationPipeline:
         announce = settings.PEEK_ANNOUNCE_AR if language is Language.ARABIC else settings.PEEK_ANNOUNCE_EN
         self.led.set_state("thinking")
         # Capture while we say "let me take a look", so the grab overlaps the announcement.
+        # No arm gesture here on purpose: a wave the instant vision starts looks off, and the
+        # head should stay steady for a clean frame. The description (respond) still gestures.
         cap_task = asyncio.create_task(self.camera.capture())
-        await self.say(announce, language, emotion=Emotion.CURIOUS, gesture=True)
+        await self.say(announce, language, emotion=Emotion.CURIOUS, gesture=False)
         try:
             jpeg = await cap_task
         except Exception:
