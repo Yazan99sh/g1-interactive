@@ -45,6 +45,7 @@ def _init_dds_if_needed() -> None:
         or settings.MIC_SOURCE == "robot"
         or settings.ARM_GESTURES_ENABLED
         or settings.MOVEMENT_COMMANDS_ENABLED
+        or (settings.CAMERA_ENABLED and settings.CAMERA_SOURCE == "dds")
     )
     if not need_dds:
         log.info("DDS not needed (robot components disabled).")
@@ -112,9 +113,23 @@ def build_brain(llm: LLMEngine):
 
 
 def build_camera(http: httpx.AsyncClient):
-    """Head camera for 'peek' (HTTP JPEG from the Jetson helper). NullCamera unless
-    CAMERA_ENABLED + a snapshot URL. Not a DDS client — works from the dev PC too."""
-    if settings.CAMERA_ENABLED and settings.CAMERA_SNAPSHOT_URL:
+    """Head camera for 'peek'. CAMERA_SOURCE picks the channel:
+      - "dds"  : robot head camera over DDS (videohub VideoClient) — the reliable path.
+      - "http" : Jetson helper JPEG over CAMERA_SNAPSHOT_URL (dev PC / videohub stopped).
+    NullCamera unless CAMERA_ENABLED (and, for dds, the SDK/robot are available)."""
+    if not settings.CAMERA_ENABLED:
+        return NullCamera()
+    if settings.CAMERA_SOURCE == "dds":
+        if settings.ROBOT_ENABLED:
+            try:
+                from robot.camera import G1DdsCamera
+                return G1DdsCamera(settings.CAMERA_TIMEOUT_S)
+            except Exception:
+                log_exception(log, "DDS camera unavailable — peek disabled")
+        else:
+            log.warning("CAMERA_SOURCE=dds but ROBOT_ENABLED is false — peek disabled")
+        return NullCamera()
+    if settings.CAMERA_SNAPSHOT_URL:
         try:
             from robot.camera import G1Camera
             return G1Camera(http, settings.CAMERA_SNAPSHOT_URL)
@@ -169,7 +184,8 @@ async def amain() -> None:
         dialogflow = DialogflowClient()  # optional "first answer"; no-op unless enabled
         search = WebSearchClient(http)   # optional Brave web search; no-op without key
         brain = build_brain(llm)         # persistent memory (session snapshots + recall)
-        camera = build_camera(http)      # head camera for 'peek'; NullCamera unless enabled
+        # DDS camera Init() is a blocking RPC — build it off the loop like the other clients.
+        camera = await loop.run_in_executor(None, build_camera, http)
         pipeline = ConversationPipeline(transcriber, llm, tts, kb, conversation, arm, sink,
                                         led=led, dialogflow=dialogflow, locomotion=locomotion,
                                         search=search, brain=brain, camera=camera)

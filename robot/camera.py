@@ -1,17 +1,21 @@
 """Grab one still frame from the G1 head camera (for the 'peek' feature).
 
-Unlike the Go2, the **G1 has no DDS video service** — its head camera is an Intel
-RealSense on the onboard Jetson (PC2, 192.168.123.164). So we do NOT read it over DDS.
-A tiny helper runs on the Jetson (``tools/jetson_camera_server.py``) and exposes one
-JPEG over HTTP; this client just fetches that URL. ``NullCamera`` is the no-op used when
-peeking is disabled or no snapshot URL is set — the established real/Null client idiom
-(cf. ``robot/locomotion.py``).
+Two ways to get a frame (see CAMERA_SOURCE in config):
 
-The capture is a plain HTTP GET (no robot SDK, no DDS), so it also works from the dev PC
-as long as the Jetson helper is reachable.
+* ``G1DdsCamera`` (default) — the head RealSense is owned by the on-robot ``videohub``
+  service, which serves frames over DDS. We fetch via the SDK ``VideoClient`` — the same
+  channel the arm/speaker already use. This is the reliable path: opening ``/dev/video*``
+  directly collides with videohub ("device busy"), and videohub auto-respawns if killed.
+* ``G1Camera`` (http) — a tiny helper on the Jetson (``tools/jetson_camera_server.py``)
+  serves one JPEG over HTTP at ``CAMERA_SNAPSHOT_URL``. Plain HTTP GET (no SDK), so it
+  also works from the dev PC — but only if videohub is stopped (it owns the device).
+
+``NullCamera`` is the no-op used when peeking is disabled — the established real/Null
+client idiom (cf. ``robot/locomotion.py``).
 """
 from __future__ import annotations
 
+import asyncio
 from typing import Optional
 
 import httpx
@@ -61,6 +65,47 @@ class G1Camera:
             return None
         log.info("Camera snapshot OK (%d bytes)", len(data))
         return data
+
+    async def close(self) -> None:
+        pass
+
+
+class G1DdsCamera:
+    """Fetches a JPEG from the robot's head camera over DDS (videohub ``VideoClient``).
+
+    Requires DDS to be initialised first (see ``robot/dds.py``) and a reachable robot.
+    ``GetImageSample()`` is a blocking DDS RPC, so it runs in an executor to keep the
+    event loop responsive. Never raises — returns None on any failure.
+    """
+
+    def __init__(self, timeout_s: float = 3.0) -> None:
+        from unitree_sdk2py.go2.video.video_client import VideoClient
+
+        self._client = VideoClient()
+        self._client.SetTimeout(timeout_s)
+        self._client.Init()
+        self.enabled = True
+        log.info("G1DdsCamera ready (head camera over DDS / videohub).")
+
+    async def capture(self) -> Optional[bytes]:
+        try:
+            loop = asyncio.get_running_loop()
+            return await loop.run_in_executor(None, self._capture_blocking)
+        except Exception:
+            log_exception(log, "DDS camera capture failed")
+            return None
+
+    def _capture_blocking(self) -> Optional[bytes]:
+        code, data = self._client.GetImageSample()
+        if code != 0 or not data:
+            log.warning("DDS camera GetImageSample code=%s (%d bytes)", code, len(data) if data else 0)
+            return None
+        jpeg = bytes(data)
+        if len(jpeg) < 100:  # too small to be a real frame
+            log.warning("DDS camera frame empty/too small (%d bytes)", len(jpeg))
+            return None
+        log.info("DDS camera snapshot OK (%d bytes)", len(jpeg))
+        return jpeg
 
     async def close(self) -> None:
         pass

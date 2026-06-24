@@ -273,10 +273,17 @@ class Settings:
     # ---- Vision / peek (head camera) ----
     # OFF by default. When on, "look at / show me / what do you see" (EN+AR) makes the
     # robot grab one head-camera frame and describe it OUT LOUD (the description lives in
-    # the conversation only — no photos are saved). The G1 has no DDS video service: a
-    # tiny helper on the Jetson (tools/jetson_camera_server.py) serves one JPEG over HTTP
-    # and we fetch CAMERA_SNAPSHOT_URL. PEEK is effective only when CAMERA_ENABLED.
+    # the conversation only — no photos are saved). PEEK is effective only when CAMERA_ENABLED.
+    #
+    # CAMERA_SOURCE selects how we get a frame:
+    #   "dds"  (default) — the head RealSense is owned by the on-robot videohub service, which
+    #          serves frames over DDS; we fetch via the SDK VideoClient (same channel as the
+    #          arm/speaker). Requires ROBOT_ENABLED + a reachable robot. No Jetson helper.
+    #   "http" — fall back to a tiny helper on the Jetson (tools/jetson_camera_server.py) that
+    #          serves one JPEG over HTTP at CAMERA_SNAPSHOT_URL. Note: this collides with
+    #          videohub for the raw /dev/video* device, so it only works if videohub is stopped.
     CAMERA_ENABLED: bool = field(default_factory=lambda: _get_bool("CAMERA_ENABLED", False))
+    CAMERA_SOURCE: str = field(default_factory=lambda: _get("CAMERA_SOURCE", "dds"))
     CAMERA_SNAPSHOT_URL: str = field(
         default_factory=lambda: _get("CAMERA_SNAPSHOT_URL", "http://192.168.123.164:8090/snapshot"))
     CAMERA_TIMEOUT_S: float = field(default_factory=lambda: _get_float("CAMERA_TIMEOUT_S", 6.0))
@@ -353,6 +360,7 @@ class Settings:
             "MEMORY_SESSION_SNAPSHOTS": self.MEMORY_SESSION_SNAPSHOTS,
             "LONG_TERM_MEMORY_ENABLED": self.LONG_TERM_MEMORY_ENABLED,
             "CAMERA_ENABLED": self.CAMERA_ENABLED,
+            "CAMERA_SOURCE": self.CAMERA_SOURCE if self.CAMERA_ENABLED else "off",
             "PEEK_ENABLED": self.PEEK_ENABLED and self.CAMERA_ENABLED,
             "SAMPLE_RATE": self.SAMPLE_RATE,
             "MIC_SOURCE": self.MIC_SOURCE,
