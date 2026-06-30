@@ -141,6 +141,23 @@ Session snapshots are on by default → `brain/sessions` + `brain/logs` (browse 
 panel's **Memory** tab). For memory **across** sessions, set `LONG_TERM_MEMORY_ENABLED=true`;
 teams/supervisors persist, visitors expire (`MEMORY_VISITOR_TTL_DAYS`).
 
+### Teleop mode — run the voice app while teleoperating the arms (optional)
+
+To drive the G1's arms from VR (`xr_teleoperate`) **and** keep the robot talking, turn on
+**teleop mode** so the voice app lets go of the body. It controls the arms over the
+low-level `arm_sdk` interface, which can't be shared with the voice app's arm gestures.
+
+1. Panel **🕹️ Teleop** tab → enable **Teleop mode** → **Restart** (or set `TELEOP_MODE=true`
+   in `.env` and restart). This forces **arm gestures, voice movement and the head camera**
+   off — your individual settings are kept and come back when you turn it off.
+2. Start **xr_teleoperate first** (it claims arm control), *then* the voice pipeline. With
+   teleop mode on, the voice app holds **no** arm client and **no** `LocoClient`, so it can't
+   interfere — while the **mic, speaker and head LED keep working** (the robot still talks).
+
+The head camera is left for the teleoperator's video feed. If you want peek *and* teleop at
+once, both must read the camera over **DDS** (multiple subscribers coexist); a direct
+RealSense device-open collides with the on-robot `videohub` service.
+
 ---
 
 ## 5. Logs

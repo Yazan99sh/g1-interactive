@@ -15,7 +15,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from . import cost, dialogflow, env_file, gestures, logtail, memory, models, movement, paths, search, speech, vision
+from . import cost, dialogflow, env_file, gestures, logtail, memory, models, movement, paths, search, speech, teleop, vision
 from .process_manager import ProcessManager
 from .scripts import ScriptRunner, list_scripts, save_upload
 
@@ -255,6 +255,18 @@ async def set_movement(payload: dict = Body(...)) -> dict:
         yaw=payload.get("yaw"),
         duration_s=payload.get("duration_s"),
     )
+    return {"ok": True, "restart_required": bool(changed)}
+
+
+# ---- teleop mode (master override: release the arms/locomotion/camera for a teleoperator) ----
+@app.get("/api/teleop")
+async def get_teleop() -> dict:
+    return teleop.get_config()
+
+
+@app.post("/api/teleop")
+async def set_teleop(payload: dict = Body(...)) -> dict:
+    changed = teleop.set_config(enabled=payload.get("enabled"))
     return {"ok": True, "restart_required": bool(changed)}
 
 

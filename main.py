@@ -43,9 +43,9 @@ def _init_dds_if_needed() -> None:
     need_dds = settings.ROBOT_ENABLED and (
         settings.AUDIO_SINK == "robot"
         or settings.MIC_SOURCE == "robot"
-        or settings.ARM_GESTURES_ENABLED
-        or settings.MOVEMENT_COMMANDS_ENABLED
-        or (settings.CAMERA_ENABLED and settings.CAMERA_SOURCE == "dds")
+        or settings.arm_gestures_active
+        or settings.movement_active
+        or (settings.camera_active and settings.CAMERA_SOURCE == "dds")
     )
     if not need_dds:
         log.info("DDS not needed (robot components disabled).")
@@ -60,7 +60,9 @@ def _init_dds_if_needed() -> None:
 
 
 def build_arm() -> ArmController:
-    if settings.ROBOT_ENABLED and settings.ARM_GESTURES_ENABLED:
+    # arm_gestures_active is false in teleop mode, so the app never opens the arm client
+    # (no ExecuteAction, no LocoClient.Start) — the arms stay free for the teleoperator.
+    if settings.ROBOT_ENABLED and settings.arm_gestures_active:
         try:
             from robot.arm_gestures import G1ArmGestures
             return G1ArmGestures()
@@ -70,8 +72,9 @@ def build_arm() -> ArmController:
 
 
 def build_locomotion():
-    """Experimental voice movement (LocoClient). NullLocomotion unless enabled + on robot."""
-    if settings.ROBOT_ENABLED and settings.MOVEMENT_COMMANDS_ENABLED:
+    """Experimental voice movement (LocoClient). NullLocomotion unless enabled + on robot
+    (and never in teleop mode, where the teleoperator owns locomotion)."""
+    if settings.ROBOT_ENABLED and settings.movement_active:
         try:
             from robot.locomotion import G1Locomotion
             return G1Locomotion()
@@ -116,8 +119,9 @@ def build_camera(http: httpx.AsyncClient):
     """Head camera for 'peek'. CAMERA_SOURCE picks the channel:
       - "dds"  : robot head camera over DDS (videohub VideoClient) — the reliable path.
       - "http" : Jetson helper JPEG over CAMERA_SNAPSHOT_URL (dev PC / videohub stopped).
-    NullCamera unless CAMERA_ENABLED (and, for dds, the SDK/robot are available)."""
-    if not settings.CAMERA_ENABLED:
+    NullCamera unless CAMERA_ENABLED (and, for dds, the SDK/robot are available). Also a
+    no-op in teleop mode, which leaves the head camera for the teleoperator's video feed."""
+    if not settings.camera_active:
         return NullCamera()
     if settings.CAMERA_SOURCE == "dds":
         if settings.ROBOT_ENABLED:

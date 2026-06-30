@@ -244,5 +244,33 @@ finally:
     settings.OPENROUTER_API_KEY, settings.OPENAI_API_KEY = _oor, _ooa
     import asyncio as _a3; _a3.run(_h2.aclose())
 
+# 20. teleop mode — master override forces the conflicting gates off without losing the
+# operator's raw settings, and the panel module reflects it (pure, no .env writes).
+_otele = settings.TELEOP_MODE
+_oarm, _omov, _ocam = settings.ARM_GESTURES_ENABLED, settings.MOVEMENT_COMMANDS_ENABLED, settings.CAMERA_ENABLED
+try:
+    settings.ARM_GESTURES_ENABLED = True
+    settings.MOVEMENT_COMMANDS_ENABLED = True
+    settings.CAMERA_ENABLED = True
+    settings.TELEOP_MODE = False
+    check("teleop off arm active", settings.arm_gestures_active is True)
+    check("teleop off move active", settings.movement_active is True)
+    check("teleop off cam active", settings.camera_active is True)
+    settings.TELEOP_MODE = True
+    check("teleop on arm released", settings.arm_gestures_active is False)
+    check("teleop on move released", settings.movement_active is False)
+    check("teleop on cam released", settings.camera_active is False)
+    # Raw settings are preserved (only the effective gates change).
+    check("teleop preserves raw", settings.ARM_GESTURES_ENABLED is True and settings.CAMERA_ENABLED is True)
+finally:
+    settings.TELEOP_MODE = _otele
+    settings.ARM_GESTURES_ENABLED, settings.MOVEMENT_COMMANDS_ENABLED, settings.CAMERA_ENABLED = _oarm, _omov, _ocam
+
+from controlpanel import teleop as _teleop  # noqa: E402
+_tcfg = _teleop.get_config()
+check("teleop panel keys", set(["enabled", "suppresses", "arm_gestures", "movement", "camera"]).issubset(_tcfg))
+check("teleop panel suppresses", _tcfg["suppresses"] == ["ARM_GESTURES_ENABLED", "MOVEMENT_COMMANDS_ENABLED", "CAMERA_ENABLED"])
+check("teleop set noop", _teleop.set_config(enabled=None) is False)
+
 print("\nALL PASS" if ok else "\nSOME FAILED")
 sys.exit(0 if ok else 1)

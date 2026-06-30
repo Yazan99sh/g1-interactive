@@ -317,6 +317,15 @@ tabInit.vision = async () => {
   $("vsTestOut").textContent = "";
 };
 
+// ---- teleop mode (master override) ----
+tabInit.teleop = async () => {
+  const t = await api("/api/teleop");
+  $("tpEnabled").checked = !!t.enabled;
+  $("tpSummary").textContent = t.enabled
+    ? "Teleop mode is ON — arm gestures, voice movement and the head camera are released for the teleoperator (your saved settings are kept and resume when you turn it off)."
+    : "Teleop mode is OFF — the robot uses your normal gesture / movement / camera settings.";
+};
+
 // ---- environment ----
 const VOICE_KEYS = ["ELEVENLABS_VOICE_ID", "ELEVENLABS_ARABIC_VOICE_ID"];
 tabInit.environment = async () => {
@@ -436,6 +445,15 @@ function wire() {
     };
     try { const r = await api("/api/movement", { method: "POST", body }); toast("Movement settings saved"); if (r.restart_required) showRestart(); }
     catch (e) { toast("Save failed: " + e.message, true); }
+  };
+
+  $("btnTeleopSave").onclick = async () => {
+    try {
+      const r = await api("/api/teleop", { method: "POST", body: { enabled: $("tpEnabled").checked } });
+      toast("Teleop mode saved");
+      tabInit.teleop();
+      if (r.restart_required) showRestart();
+    } catch (e) { toast("Save failed: " + e.message, true); }
   };
 
   $("mdlLlm").onchange = renderLlmNote;

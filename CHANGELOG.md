@@ -2,6 +2,23 @@
 
 All notable changes to the G1 Interactive Voice Pipeline.
 
+## [Unreleased]
+
+### Added — Teleop mode (run the voice app alongside a VR/arm teleoperator)
+- New **`TELEOP_MODE`** master override (default **off**). When on, the voice app releases
+  every resource that would fight an `xr_teleoperate` operator: it does **not** open the arm
+  client (so no gestures and no `LocoClient.Start`), does **not** run voice-driven movement,
+  and does **not** open the head camera (peek). Mic, speaker and the head LED keep working,
+  so the robot can still talk and light up while its arms are teleoperated.
+- It **overrides** without destroying settings: `config.py` gains `arm_gestures_active` /
+  `movement_active` / `camera_active` properties (raw switch `AND NOT TELEOP_MODE`), which
+  `build_arm` / `build_locomotion` / `build_camera` / `_init_dds_if_needed` now use. Your
+  `ARM_GESTURES_ENABLED` / `MOVEMENT_COMMANDS_ENABLED` / `CAMERA_ENABLED` values are kept and
+  resume when teleop mode is turned off.
+- New control-panel **🕹️ Teleop** tab + `controlpanel/teleop.py` + `GET`/`POST /api/teleop`.
+  Documented in `.env.example` / `CONTROL_PANEL.md` / `RUNBOOK.md`; `_selftest.py` covers the
+  override gates and the panel module.
+
 ## [1.2.0] — 2026-06-23 — Selectable LLM + TTS models (control-panel managed)
 
 Developed on the `remember-me` branch (continues 1.1.0).

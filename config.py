@@ -302,6 +302,17 @@ class Settings:
     PEEK_ANNOUNCE_EN: str = field(default_factory=lambda: _get("PEEK_ANNOUNCE_EN", "Sure, let me take a look."))
     PEEK_ANNOUNCE_AR: str = field(default_factory=lambda: _get("PEEK_ANNOUNCE_AR", "حسنًا، خليني أشوف."))
 
+    # ---- Teleop mode (master override) ----
+    # When ON, the voice app RELEASES every resource that would fight a VR/arm
+    # teleoperator (xr_teleoperate): it does NOT open the arm client (so no gestures and
+    # no LocoClient.Start), does NOT run voice-driven locomotion, and does NOT open the
+    # head camera (peek). It OVERRIDES the three switches below — your ARM_GESTURES_ENABLED
+    # / MOVEMENT_COMMANDS_ENABLED / CAMERA_ENABLED values are PRESERVED and resume when you
+    # turn teleop mode off. Voice (mic + speaker) and the head LED keep working, so the
+    # robot can still talk and light up while teleoperated. Default OFF; toggle from the
+    # panel's Teleop tab. Applied on the pipeline's next restart.
+    TELEOP_MODE: bool = field(default_factory=lambda: _get_bool("TELEOP_MODE", False))
+
     # ---- Robot brain / memory ----
     # Every finished session is snapshotted to brain/sessions + brain/logs on the host
     # (a "copy on the PC") whenever this is on — works even with long-term memory off.
@@ -340,6 +351,21 @@ class Settings:
         p = Path(self.BRAIN_DIR).expanduser()
         return p if p.is_absolute() else (self.BASE_DIR / p)
 
+    # ---- Effective feature gates (fold in the teleop-mode master override) ----
+    # Builders use these (not the raw flags) so TELEOP_MODE forces the conflicting
+    # resources off in ONE place without touching the operator's saved settings.
+    @property
+    def arm_gestures_active(self) -> bool:
+        return self.ARM_GESTURES_ENABLED and not self.TELEOP_MODE
+
+    @property
+    def movement_active(self) -> bool:
+        return self.MOVEMENT_COMMANDS_ENABLED and not self.TELEOP_MODE
+
+    @property
+    def camera_active(self) -> bool:
+        return self.CAMERA_ENABLED and not self.TELEOP_MODE
+
     def redacted(self) -> dict:
         """A dict of settings safe to log (keys masked)."""
         def mask(v: str) -> str:
@@ -368,14 +394,15 @@ class Settings:
             "MEMORY_SESSION_SNAPSHOTS": self.MEMORY_SESSION_SNAPSHOTS,
             "LONG_TERM_MEMORY_ENABLED": self.LONG_TERM_MEMORY_ENABLED,
             "CAMERA_ENABLED": self.CAMERA_ENABLED,
-            "CAMERA_SOURCE": self.CAMERA_SOURCE if self.CAMERA_ENABLED else "off",
-            "PEEK_ENABLED": self.PEEK_ENABLED and self.CAMERA_ENABLED,
+            "CAMERA_SOURCE": self.CAMERA_SOURCE if self.camera_active else "off",
+            "PEEK_ENABLED": self.PEEK_ENABLED and self.camera_active,
             "SAMPLE_RATE": self.SAMPLE_RATE,
             "MIC_SOURCE": self.MIC_SOURCE,
             "AUDIO_SINK": self.AUDIO_SINK,
             "ROBOT_ENABLED": self.ROBOT_ENABLED,
+            "TELEOP_MODE": self.TELEOP_MODE,
             "DDS_INTERFACE": self.DDS_INTERFACE,
-            "ARM_GESTURES_ENABLED": self.ARM_GESTURES_ENABLED,
+            "ARM_GESTURES_ENABLED": self.arm_gestures_active,
             "TALK_GESTURES_ENABLED": self.TALK_GESTURES_ENABLED,
             "WAKE_WORDS": self.WAKE_WORDS,
             "IDLE_AFTER_SILENT_TURNS": self.IDLE_AFTER_SILENT_TURNS,

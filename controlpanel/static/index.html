@@ -43,6 +43,7 @@
       <button class="navItem" data-tab="search">🔎 Web Search</button>
       <button class="navItem" data-tab="memory">🧠 Memory</button>
       <button class="navItem" data-tab="vision">👁️ Vision</button>
+      <button class="navItem" data-tab="teleop">🕹️ Teleop</button>
       <button class="navItem" data-tab="environment">🔑 Environment</button>
       <button class="navItem" data-tab="scripts">⚙️ Scripts</button>
     </nav>
@@ -313,6 +314,19 @@
           <pre id="vsTestOut" class="console"></pre>
         </div>
         <p class="muted">Run <code>tools/jetson_camera_server.py</code> on the G1 Jetson (PC2) first. Takes effect on restart.</p>
+      </section>
+
+      <!-- Teleop -->
+      <section class="tab" id="tab-teleop">
+        <h2>Teleop mode <span class="muted">hand the robot's body to a VR/arm teleoperator</span></h2>
+        <div class="card">
+          <label class="toggle"><input type="checkbox" id="tpEnabled"> <b>Teleop mode</b> — release the arms, locomotion &amp; head camera</label>
+          <p class="muted">When ON, the voice app stops touching anything a teleoperator (<code>xr_teleoperate</code>) needs: it won't run <b>arm gestures</b>, won't enter or command the <b>locomotion FSM</b>, won't run <b>voice movement</b>, and won't open the <b>head camera</b> (peek). The <b>mic, speaker and head LED keep working</b>, so the robot can still talk and light up while you drive its arms in VR.</p>
+          <p class="muted">This <b>overrides</b> your individual settings without changing them — turn teleop mode off and your gestures / movement / camera come back exactly as they were.</p>
+          <p class="muted">⚠️ Start <b>xr_teleoperate first</b> (it claims arm control via <code>arm_sdk</code>), then start this pipeline. Takes effect on <b>restart</b>.</p>
+          <button id="btnTeleopSave" class="btn">Save teleop mode</button>
+        </div>
+        <p class="muted" id="tpSummary"></p>
       </section>
 
       <!-- Environment -->
